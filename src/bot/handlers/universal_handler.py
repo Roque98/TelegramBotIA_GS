@@ -10,8 +10,13 @@ from telegram.ext import ContextTypes
 from src.tools.tool_orchestrator import ToolOrchestrator
 from src.tools.execution_context import ExecutionContextBuilder
 from src.utils.status_message import StatusMessage
+from src.utils.input_validator import InputValidator
+from src.utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
+
+# Rate limiter global (10 requests por minuto por usuario)
+_rate_limiter = RateLimiter(max_requests=10, time_window=60)
 
 
 class UniversalHandler:
@@ -75,6 +80,40 @@ class UniversalHandler:
 
         logger.info(f"UniversalHandler procesando comando '{command}' para usuario {user_id}")
 
+        # ✅ NUEVA VALIDACIÓN: Rate limiting
+        if not _rate_limiter.is_allowed(user_id):
+            retry_after = _rate_limiter.get_retry_after(user_id)
+            await update.message.reply_text(
+                f"⏱️ Has alcanzado el límite de consultas.\n"
+                f"Intenta de nuevo en {retry_after} segundos.\n\n"
+                "_IRIS está aquí para ayudarte, pero con moderación_ 💙"
+            )
+            return
+
+        # ✅ NUEVA VALIDACIÓN: Input validation para comandos de consulta
+        if command in ["/ia", "/query"]:
+            if not args_text:
+                await update.message.reply_text(
+                    "❌ Debes proporcionar una consulta.\n\n"
+                    "**Ejemplo:** `/ia ¿Cuántos usuarios hay?`",
+                    parse_mode='Markdown'
+                )
+                return
+
+            # Validar la consulta
+            is_valid, error_message = InputValidator.validate_query(args_text)
+            if not is_valid:
+                await update.message.reply_text(
+                    f"❌ Consulta inválida: {error_message}\n\n"
+                    "_Asegúrate de que tu consulta sea clara y específica_ 💡",
+                    parse_mode='Markdown'
+                )
+                return
+
+            # Sanitizar la consulta
+            args_text = InputValidator.sanitize_query(args_text)
+            logger.debug(f"Query sanitizada para usuario {user_id}")
+
         # Buscar el tool correspondiente
         tool = self.tool_orchestrator.registry.get_tool_by_command(command)
 
@@ -89,14 +128,14 @@ class UniversalHandler:
         status_msg = StatusMessage(update, context)
 
         try:
-            # Determinar mensaje de estado según el tool (con personalidad de Amber)
+            # Determinar mensaje de estado según el tool (con personalidad de IRIS)
             status_messages = {
-                "/ia": "🔍 Amber analizando tu consulta...",
-                "/query": "🔍 Amber analizando tu consulta...",
-                "/help": "📚 Amber preparando la ayuda...",
-                "/stats": "📊 Amber generando tus estadísticas..."
+                "/ia": "🔍 IRIS analizando tu consulta...",
+                "/query": "🔍 IRIS analizando tu consulta...",
+                "/help": "📚 IRIS preparando la ayuda...",
+                "/stats": "📊 IRIS generando tus estadísticas..."
             }
-            initial_status = status_messages.get(command, f"⚙️ Amber ejecutando {command}...")
+            initial_status = status_messages.get(command, f"⚙️ IRIS ejecutando {command}...")
             await status_msg.send(initial_status)
 
             # Construir contexto de ejecución
