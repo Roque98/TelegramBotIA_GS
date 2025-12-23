@@ -226,7 +226,7 @@ class ToolRegistry:
         self._tools_by_category.clear()
         logger.warning("ToolRegistry limpiado completamente")
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
         Obtener estadísticas del registro.
 

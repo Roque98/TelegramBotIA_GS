@@ -30,47 +30,49 @@ class KnowledgeManager:
         >>> print(results[0].answer)
     """
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(self, db_manager: Optional[DatabaseManager] = None, id_rol: Optional[int] = None):
         """
         Inicializar el gestor de conocimiento.
 
         Args:
             db_manager: Gestor de base de datos (opcional)
+            id_rol: ID del rol del usuario para filtrar conocimiento (opcional)
         """
         self.repository = KnowledgeRepository(db_manager)
         self.knowledge_base = []
         self.source = "unknown"
+        self.id_rol = id_rol  # ID del rol para filtrado de permisos
 
         # Intentar cargar desde BD primero
         try:
             if self.repository.health_check():
-                self.knowledge_base = self.repository.get_all_entries()
-                if self.knowledge_base:
-                    self.source = "database"
+                # Cargar entradas filtradas por rol si se especifica
+                if id_rol is not None:
+                    self.knowledge_base = self.repository.get_all_entries_by_role(id_rol)
                     logger.info(
-                        f"✅ KnowledgeManager inicializado desde BD "
+                        f"✅ KnowledgeManager inicializado desde BD para rol {id_rol} "
                         f"con {len(self.knowledge_base)} entradas"
                     )
                 else:
-                    # BD vacía, usar código
-                    raise ValueError("Base de datos sin entradas")
+                    self.knowledge_base = self.repository.get_all_entries()
+                    logger.info(
+                        f"✅ KnowledgeManager inicializado desde BD "
+                        f"con {len(self.knowledge_base)} entradas (sin filtro de rol)"
+                    )
+
+                if self.knowledge_base:
+                    self.source = "database"
+                else:
+                    # BD vacía o sin permisos
+                    if id_rol is not None:
+                        logger.warning(f"Rol {id_rol} no tiene acceso a ninguna categoría de conocimiento")
+                    else:
+                        raise ValueError("Base de datos sin entradas")
             else:
                 # Health check falló
                 raise ConnectionError("Base de datos no disponible")
 
         except Exception as e:
-            # Fallback a código - COMENTADO: Solo usar BD
-            # logger.warning(
-            #     f"⚠️ No se pudo cargar desde BD ({e}), "
-            #     f"usando conocimiento desde código"
-            # )
-            # self.knowledge_base = get_knowledge_base()
-            # self.source = "code"
-            # logger.info(
-            #     f"📝 KnowledgeManager inicializado desde código "
-            #     f"con {len(self.knowledge_base)} entradas"
-            # )
-
             # Solo usar BD - fallar si no está disponible
             logger.error(f"❌ No se pudo cargar conocimiento desde BD: {e}")
             self.knowledge_base = []
@@ -224,7 +226,7 @@ class KnowledgeManager:
         """Obtener todas las categorías disponibles."""
         return KnowledgeCategory.get_all()
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
         Obtener estadísticas de la base de conocimiento.
 
@@ -311,4 +313,5 @@ class KnowledgeManager:
 
     def __repr__(self) -> str:
         """Representación del manager."""
-        return f"KnowledgeManager(entries={len(self.knowledge_base)}, source='{self.source}')"
+        role_info = f", role={self.id_rol}" if self.id_rol is not None else ""
+        return f"KnowledgeManager(entries={len(self.knowledge_base)}, source='{self.source}'{role_info})"

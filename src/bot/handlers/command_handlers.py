@@ -4,7 +4,7 @@ Handlers para comandos del bot de Telegram.
 Maneja comandos básicos como /start, /help, /stats, etc.
 """
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, Application
 from src.agent.knowledge import KnowledgeRepository
@@ -13,16 +13,19 @@ from src.database.connection import DatabaseManager
 logger = logging.getLogger(__name__)
 
 
-def _get_categories_from_db() -> List[Dict[str, any]]:
+def _get_categories_from_db(id_rol: Optional[int] = None) -> List[Dict[str, Any]]:
     """
-    Obtener categorías disponibles desde la base de datos.
+    Obtener categorías disponibles desde la base de datos, filtradas por rol.
+
+    Args:
+        id_rol: ID del rol del usuario para filtrar categorías (opcional)
 
     Returns:
         Lista de diccionarios con {name, display_name, icon, entry_count}
     """
     try:
         repository = KnowledgeRepository()
-        return repository.get_categories_info()
+        return repository.get_categories_info(id_rol=id_rol)
     except Exception as e:
         logger.warning(f"No se pudieron cargar categorías desde BD: {e}")
         # Fallback básico
@@ -78,8 +81,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f"Usuario {user.id} ({user.username}) ejecutó /start")
 
-    # Obtener categorías y ejemplos desde BD
-    categories = _get_categories_from_db()
+    # Obtener rol del usuario para filtrar categorías
+    id_rol = None
+    try:
+        db_manager = context.bot_data.get('db_manager')
+        if db_manager:
+            from src.auth import UserManager
+            with db_manager.get_session() as session:
+                user_manager = UserManager(session)
+                telegram_user = user_manager.get_user_by_telegram_chat_id(user.id)
+                if telegram_user and telegram_user.usuario:
+                    id_rol = telegram_user.usuario.rol
+                    logger.debug(f"Usuario tiene rol: {id_rol}")
+    except Exception as e:
+        logger.warning(f"No se pudo obtener rol del usuario: {e}")
+
+    # Obtener categorías y ejemplos desde BD (filtradas por rol)
+    categories = _get_categories_from_db(id_rol=id_rol)
     examples = _get_example_questions_from_db(4)
 
     # Construir lista de categorías
@@ -93,8 +111,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     examples_text = "\n".join([f"• {q}" for q in examples])
 
     welcome_message = (
-        f"¡Hola {user.first_name}! 👋 Soy **Amber**\n\n"
-        "Analista del Centro de Operaciones aquí ✨\n\n"
+        f"¡Hola {user.first_name}! 👋 Soy **IRIS**\n\n"
+        "Tu asistente del Centro de Operaciones aquí ✨\n\n"
         "Estoy para ayudarte con información sobre:\n"
         f"{categories_text}\n\n"
         "**Ejemplos de lo que puedes preguntarme:**\n"
@@ -120,11 +138,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update: Objeto de actualización de Telegram
         context: Contexto de la conversación
     """
-    user_id = update.effective_user.id
-    logger.info(f"Usuario {user_id} ejecutó /help")
+    user = update.effective_user
+    logger.info(f"Usuario {user.id} ejecutó /help")
 
-    # Obtener categorías desde BD
-    categories = _get_categories_from_db()
+    # Obtener rol del usuario para filtrar categorías
+    id_rol = None
+    try:
+        db_manager = context.bot_data.get('db_manager')
+        if db_manager:
+            from src.auth import UserManager
+            with db_manager.get_session() as session:
+                user_manager = UserManager(session)
+                telegram_user = user_manager.get_user_by_telegram_chat_id(user.id)
+                if telegram_user and telegram_user.usuario:
+                    id_rol = telegram_user.usuario.rol
+                    logger.debug(f"Usuario tiene rol: {id_rol}")
+    except Exception as e:
+        logger.warning(f"No se pudo obtener rol del usuario: {e}")
+
+    # Obtener categorías desde BD (filtradas por rol)
+    categories = _get_categories_from_db(id_rol=id_rol)
     examples = _get_example_questions_from_db(6)  # Más ejemplos para /help
 
     # Construir sección de categorías con ejemplos
@@ -140,7 +173,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     examples_text = "\n".join([f"   • {q}" for q in examples[:6]])
 
     help_message = (
-        "**📖 Guía de Uso - Amber te explica**\n\n"
+        "**📖 Guía de Uso - IRIS te explica**\n\n"
         "Hola de nuevo! Aquí está todo lo que puedo hacer por ti ✨\n\n"
         "**Comandos Disponibles:**\n"
         "/start - Volver a la bienvenida\n"
@@ -151,7 +184,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{categories_section}\n\n"
         "**Ejemplos de preguntas:**\n"
         f"{examples_text}\n\n"
-        "**Consejos de Amber:**\n"
+        "**Consejos de IRIS:**\n"
         "✅ Sé específico, me ayuda a ayudarte mejor\n"
         "✅ Puedo trabajar con lenguaje natural, no necesitas saber SQL\n"
         "✅ Si algo no está claro, pregúntame de nuevo\n\n"
