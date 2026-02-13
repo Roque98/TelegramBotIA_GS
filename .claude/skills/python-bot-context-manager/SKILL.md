@@ -10,6 +10,26 @@ stack: Python 3.11+, python-telegram-bot, OpenAI, Anthropic, SQL Server, Pydanti
 
 Skill para desarrollo del bot **Iris** - un asistente conversacional inteligente con arquitectura multi-agent basada en ReAct.
 
+## Archivos de Contexto
+
+Para referencia rápida sobre el estado actual del proyecto, consulta:
+
+```
+.claude/context/
+├── INDEX.md        # Índice y resumen ejecutivo
+├── ARCHITECTURE.md # Arquitectura de 4 capas
+├── HANDLERS.md     # 9 comandos, 2 message handlers
+├── TOOLS.md        # Sistema de tools (1 tool)
+├── DATABASE.md     # 15+ tablas, queries comunes
+├── AGENTS.md       # LLMAgent actual + plan ReAct
+├── PROMPTS.md      # 6 templates versionados
+└── MEMORY.md       # Sistema de memoria en capas
+```
+
+**Uso**: Estos archivos contienen el estado actual (WHAT exists). Esta skill contiene patrones de desarrollo (HOW to build).
+
+---
+
 ## Arquitectura del Proyecto
 
 ```
