@@ -78,6 +78,7 @@ Consultar estas skills para convenciones y patrones:
 - `.claude/skills/gitflow-workflow/SKILL.md` - Convenciones de Git y GitHub
 - `.claude/skills/project-planner/SKILL.md` - Formato de planes con TODOs
 - `.claude/skills/python-bot-context-manager/SKILL.md` - Patrones de desarrollo del bot
+- `.claude/skills/onenote-documentation/SKILL.md` - Documentación de proyectos para OneNote
 
 ---
 
