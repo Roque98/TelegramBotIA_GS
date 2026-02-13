@@ -44,7 +44,8 @@ class ResponseFormatter:
         user_query: str,
         sql_query: str,
         results: List[Dict[str, Any]],
-        include_sql: bool = False
+        include_sql: bool = False,
+        user_name: Optional[str] = None
     ) -> str:
         """
         Formatear resultados de una consulta SQL.
@@ -57,6 +58,7 @@ class ResponseFormatter:
             sql_query: Consulta SQL ejecutada
             results: Resultados de la consulta
             include_sql: Si se debe incluir el SQL en la respuesta
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Respuesta formateada
@@ -68,7 +70,7 @@ class ResponseFormatter:
         if self.use_natural_language:
             try:
                 natural_response = await self._format_with_llm(
-                    user_query, sql_query, results
+                    user_query, sql_query, results, user_name
                 )
                 if natural_response:
                     # Opcional: agregar SQL si se solicita
@@ -119,7 +121,7 @@ class ResponseFormatter:
 
     def format_error(self, error_message: str, user_friendly: bool = True) -> str:
         """
-        Formatear un mensaje de error con la personalidad de Amber.
+        Formatear un mensaje de error con la personalidad de Iris.
 
         Args:
             error_message: Mensaje de error técnico
@@ -132,14 +134,14 @@ class ResponseFormatter:
             return (
                 "❌ Oh no, tuve un problema procesando eso.\n\n"
                 "¿Podrías intentar reformular tu pregunta de otra manera?\n\n"
-                "_Amber está aquí para ayudarte_ ✨"
+                "_Iris está aquí para ayudarte_ ✨"
             )
         else:
             return f"**Error:** {error_message}"
 
     def _format_empty_results(self, user_query: str) -> str:
         """
-        Formatear respuesta cuando no hay resultados (con personalidad de Amber).
+        Formatear respuesta cuando no hay resultados (con personalidad de Iris).
 
         Args:
             user_query: Consulta del usuario
@@ -153,7 +155,7 @@ class ResponseFormatter:
             "• Intenta reformular la pregunta\n"
             "• Verifica los nombres de tablas o campos\n"
             "• Prueba con términos diferentes\n\n"
-            "_Amber está aquí si necesitas ayuda_ ✨"
+            "_Iris está aquí si necesitas ayuda_ ✨"
         )
 
     def _format_single_result(self, result: Dict[str, Any]) -> str:
@@ -237,7 +239,8 @@ class ResponseFormatter:
         self,
         user_query: str,
         sql_query: str,
-        results: List[Dict[str, Any]]
+        results: List[Dict[str, Any]],
+        user_name: Optional[str] = None
     ) -> Optional[str]:
         """
         Formatear resultados usando LLM para generar respuesta en lenguaje natural.
@@ -246,6 +249,7 @@ class ResponseFormatter:
             user_query: Consulta original del usuario
             sql_query: Consulta SQL ejecutada
             results: Resultados de la consulta
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Respuesta en lenguaje natural, o None si falla
@@ -266,7 +270,8 @@ class ResponseFormatter:
                 sql_query=sql_query,
                 num_results=len(results),
                 results_sample=results_sample,
-                sample_size=sample_size
+                sample_size=sample_size,
+                user_name=user_name or ""
             )
 
             # Generar respuesta con el LLM
