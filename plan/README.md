@@ -1,70 +1,90 @@
-# Plan de Refactorización: Multi-Agent Architecture
+# Planes del Proyecto Iris Bot
 
-## Resumen Ejecutivo
+> **Proyecto**: Iris - Bot conversacional con LLM
+> **Última actualización**: 2024-02-13
 
-Tu `LLMAgent` actual tiene **demasiadas responsabilidades**:
-- Orquestación
-- Clasificación de intención
-- Generación de SQL
-- Formateo de respuestas
-- Gestión de memoria
-- Validación de seguridad
+---
 
-Esto genera:
-- Código difícil de testear
-- Cambios que afectan todo el sistema
-- Dificultad para agregar nuevas funcionalidades
+## Resumen General
 
-## Solución Propuesta
+| Métrica | Valor |
+|---------|-------|
+| Planes activos | 1 |
+| Planes completados | 0 |
+| Progreso global | 5% |
 
-**Arquitectura Multi-Agent con Event-Driven Design**
+---
 
-```
-                    ┌─────────────────┐
-                    │  SUPERVISOR     │  ← Único orquestador
-                    │  (No lógica)    │
-                    └────────┬────────┘
-                             │
-         ┌───────────────────┼───────────────────┐
-         │                   │                   │
-         ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  CLASSIFIER     │ │   DATABASE      │ │   KNOWLEDGE     │
-│  Agent          │ │   Agent         │ │   Agent         │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-         │                   │                   │
-         └───────────────────┴───────────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   EVENT BUS     │  ← Comunicación desacoplada
-                    └─────────────────┘
-```
+## Planes Activos
 
-## Documentos en este Plan
+| Plan | Estado | Progreso | Rama | Última Actualización |
+|------|--------|----------|------|---------------------|
+| [Migración ReAct](PLAN_REACT_MIGRATION.md) | 🟡 En progreso | █░░░░░░░░░ 5% | `feature/react-agent-migration` | 2024-02-13 |
+
+---
+
+## Documentación de Referencia
 
 | Archivo | Descripción |
 |---------|-------------|
-| `ARQUITECTURA_PROPUESTA.md` | Diseño completo de la nueva arquitectura |
-| `EJEMPLOS_IMPLEMENTACION.md` | Código de ejemplo para cada componente |
-| `PLAN_MIGRACION.md` | Plan incremental de 5 fases |
+| [ARQUITECTURA_PROPUESTA.md](ARQUITECTURA_PROPUESTA.md) | Diseño de arquitectura multi-agent |
+| [EJEMPLOS_IMPLEMENTACION.md](EJEMPLOS_IMPLEMENTACION.md) | Código de ejemplo para componentes |
+| [IMPLEMENTACION_REACT_AGENT.md](IMPLEMENTACION_REACT_AGENT.md) | Especificación técnica detallada |
+| [PLAN_MIGRACION.md](PLAN_MIGRACION.md) | Estrategia de migración incremental |
+| [REACT_AGENT.md](REACT_AGENT.md) | Explicación del paradigma ReAct |
 
-## Beneficios Clave
+---
 
-1. **Testabilidad**: Cada agente se testea en aislamiento
-2. **Extensibilidad**: Agregar agente = nuevo archivo, sin tocar existentes
-3. **Observabilidad**: Event sourcing = audit trail completo
-4. **Escalabilidad**: Agentes pueden escalar independientemente
-5. **Mantenibilidad**: Código más pequeño y enfocado
+## Planes Futuros
 
-## Próximos Pasos
+- [ ] API REST para integración externa
+- [ ] WebSocket para tiempo real
+- [ ] Dashboard de administración
+- [ ] Sistema de plugins
+- [ ] Multi-idioma
 
-1. Revisar `ARQUITECTURA_PROPUESTA.md`
-2. Decidir si la dirección es correcta
-3. Comenzar con Fase 1 (Foundation)
+---
 
-## Tecnologías Sugeridas
+## Cómo Usar los Planes
 
-- **Event Bus**: Redis Pub/Sub (producción) / In-memory (desarrollo)
-- **Structured Output**: Pydantic + LLM generate_structured
-- **Tracing**: OpenTelemetry
-- **Tests**: pytest-asyncio
+### Ver Progreso
+1. Abrir el plan específico
+2. Revisar tabla "Resumen de Progreso"
+3. Ver tareas pendientes por fase
+
+### Actualizar Progreso
+1. Marcar tarea: `[ ]` → `[x]`
+2. Agregar commit hash si aplica
+3. Recalcular porcentaje de fase
+4. Actualizar tabla de resumen
+5. Commit: `docs(plan): actualizar progreso`
+
+### Crear Nuevo Plan
+1. Usar plantilla de `.claude/skills/project-planner/SKILL.md`
+2. Crear archivo `plan/PLAN_<nombre>.md`
+3. Agregar entrada a este README
+
+---
+
+## Convención de Nombres
+
+```
+plan/
+├── README.md                      # Este índice
+├── PLAN_<nombre>.md               # Plan con TODOs y progreso
+├── <NOMBRE>_<detalle>.md          # Documentación de referencia
+└── progress/                      # (Opcional) Historial de progreso
+    └── PROGRESS_<nombre>.md
+```
+
+---
+
+## Estados de Planes
+
+| Estado | Icono | Descripción |
+|--------|-------|-------------|
+| No iniciado | ⚪ | Plan creado pero sin trabajo |
+| En progreso | 🟡 | Tiene tareas completadas |
+| Completado | 🟢 | Todas las fases terminadas |
+| Bloqueado | 🔴 | Esperando dependencia externa |
+| Pausado | ⏸️ | Detenido temporalmente |
