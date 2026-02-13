@@ -5,7 +5,7 @@ Implementa el patrón Singleton para mantener un registro global
 de todos los tools disponibles en el sistema.
 """
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from .tool_base import BaseTool, ToolCategory
 
 logger = logging.getLogger(__name__)
