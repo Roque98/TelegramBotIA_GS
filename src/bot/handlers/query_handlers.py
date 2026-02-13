@@ -3,20 +3,38 @@ Handlers para consultas en lenguaje natural.
 
 Maneja mensajes de texto que no son comandos y los procesa con el agente LLM.
 Utiliza ToolSelector para detectar automáticamente el tool apropiado.
+Soporta feature flag para usar el nuevo sistema ReAct.
 
 Requiere autenticación y validación de permisos.
 """
 import logging
 import time
+from typing import Optional
+
 from telegram import Update
 from telegram.ext import MessageHandler, filters, ContextTypes, Application
+
 from src.agent.llm_agent import LLMAgent
 from src.auth import PermissionChecker, UserManager
+from src.config.settings import settings
 from src.utils.status_message import StatusMessage
 from src.orchestrator import ToolSelector
 from src.tools import get_registry, ToolOrchestrator, ExecutionContextBuilder
 
 logger = logging.getLogger(__name__)
+
+# Importación lazy del MainHandler para evitar dependencias circulares
+_main_handler: Optional["MainHandler"] = None
+
+
+def _get_main_handler(agent: LLMAgent) -> "MainHandler":
+    """Obtiene o crea el MainHandler singleton."""
+    global _main_handler
+    if _main_handler is None:
+        from src.gateway import create_main_handler
+        _main_handler = create_main_handler(agent)
+        logger.info("MainHandler (ReAct) inicializado para QueryHandler")
+    return _main_handler
 
 
 class QueryHandler:
@@ -30,12 +48,20 @@ class QueryHandler:
             agent: Instancia del agente LLM
         """
         self.agent = agent
+        self.use_react_agent = settings.use_react_agent
 
         # Crear selector de tools (FASE 3 - Hito 1)
         self.tool_selector = ToolSelector(agent.llm_provider)
         self.tool_orchestrator = ToolOrchestrator(get_registry())
 
-        logger.info("QueryHandler inicializado con ToolSelector (auto-selección habilitada)")
+        if self.use_react_agent:
+            logger.info(
+                "QueryHandler inicializado con ReAct Agent (USE_REACT_AGENT=true)"
+            )
+        else:
+            logger.info(
+                "QueryHandler inicializado con ToolSelector (USE_REACT_AGENT=false)"
+            )
 
     async def handle_text_message(
         self,
@@ -139,55 +165,13 @@ class QueryHandler:
         # Usar StatusMessage para mostrar progreso visual
         async with StatusMessage(update, initial_message="🔍 Amber analizando tu consulta...") as status:
             try:
-                # FASE 3 - Hito 1: Auto-selección de tool
-                selection_result = await self.tool_selector.select_tool(user_message)
-
-                logger.info(
-                    f"Tool seleccionado para usuario {telegram_user.id_usuario}: "
-                    f"{selection_result.selected_tool} (confidence: {selection_result.confidence:.2f})"
-                )
-
-                # Construir contexto de ejecución
-                with db_manager.get_session() as session:
-                    user_manager = UserManager(session)
-                    permission_checker = PermissionChecker(session)
-
-                    exec_context = (
-                        ExecutionContextBuilder()
-                        .with_telegram(update, context)
-                        .with_db_manager(db_manager)
-                        .with_llm_agent(self.agent)
-                        .with_user_manager(user_manager)
-                        .with_permission_checker(permission_checker)
-                        .build()
+                # Usar ReAct Agent si está habilitado el feature flag
+                if self.use_react_agent:
+                    response = await self._process_with_react(update, context, user_message)
+                else:
+                    response = await self._process_with_legacy(
+                        update, context, user_message, telegram_user, db_manager
                     )
-
-                    # Si hay tool seleccionado, ejecutar a través del orchestrator
-                    if selection_result.has_selection:
-                        # Obtener el comando del tool seleccionado
-                        tool = get_registry().get_tool_by_name(selection_result.selected_tool)
-                        command = tool.commands[0] if tool and tool.commands else "/ia"
-
-                        # Ejecutar tool via orchestrator
-                        tool_result = await self.tool_orchestrator.execute_command(
-                            user_id=chat_id,
-                            command=command,
-                            params={"query": user_message},
-                            context=exec_context
-                        )
-
-                        if tool_result.success:
-                            response = tool_result.data
-                        else:
-                            # Si el tool falló, usar fallback a proceso directo
-                            logger.warning(
-                                f"Tool execution failed, using fallback: {tool_result.error}"
-                            )
-                            response = await self.agent.process_query(user_message)
-                    else:
-                        # No hay tool seleccionado, usar proceso directo como fallback
-                        logger.info("No tool selected, using direct agent processing")
-                        response = await self.agent.process_query(user_message)
 
                 # Completar con la respuesta (esto edita el mensaje de estado)
                 await status.complete(response)
@@ -245,6 +229,98 @@ class QueryHandler:
 
                 # Re-lanzar la excepción para que el context manager la maneje
                 raise
+
+    async def _process_with_react(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+    ) -> str:
+        """
+        Procesa la consulta usando el nuevo sistema ReAct.
+
+        Args:
+            update: Update de Telegram
+            context: Contexto de Telegram
+            user_message: Mensaje del usuario
+
+        Returns:
+            Respuesta del agente
+        """
+        main_handler = _get_main_handler(self.agent)
+        response = await main_handler.handle_telegram(update, context)
+        return response
+
+    async def _process_with_legacy(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+        telegram_user,
+        db_manager,
+    ) -> str:
+        """
+        Procesa la consulta usando el sistema legacy (ToolSelector).
+
+        Args:
+            update: Update de Telegram
+            context: Contexto de Telegram
+            user_message: Mensaje del usuario
+            telegram_user: Usuario autenticado
+            db_manager: Gestor de base de datos
+
+        Returns:
+            Respuesta del agente
+        """
+        # FASE 3 - Hito 1: Auto-selección de tool
+        selection_result = await self.tool_selector.select_tool(user_message)
+
+        logger.info(
+            f"Tool seleccionado para usuario {telegram_user.id_usuario}: "
+            f"{selection_result.selected_tool} (confidence: {selection_result.confidence:.2f})"
+        )
+
+        # Construir contexto de ejecución
+        with db_manager.get_session() as session:
+            user_manager = UserManager(session)
+            permission_checker = PermissionChecker(session)
+
+            exec_context = (
+                ExecutionContextBuilder()
+                .with_telegram(update, context)
+                .with_db_manager(db_manager)
+                .with_llm_agent(self.agent)
+                .with_user_manager(user_manager)
+                .with_permission_checker(permission_checker)
+                .build()
+            )
+
+            # Si hay tool seleccionado, ejecutar a través del orchestrator
+            if selection_result.has_selection:
+                # Obtener el comando del tool seleccionado
+                tool = get_registry().get_tool_by_name(selection_result.selected_tool)
+                command = tool.commands[0] if tool and tool.commands else "/ia"
+
+                # Ejecutar tool via orchestrator
+                tool_result = await self.tool_orchestrator.execute_command(
+                    user_id=update.effective_user.id,
+                    command=command,
+                    params={"query": user_message},
+                    context=exec_context
+                )
+
+                if tool_result.success:
+                    return tool_result.data
+                else:
+                    # Si el tool falló, usar fallback a proceso directo
+                    logger.warning(
+                        f"Tool execution failed, using fallback: {tool_result.error}"
+                    )
+                    return await self.agent.process_query(user_message)
+            else:
+                # No hay tool seleccionado, usar proceso directo como fallback
+                logger.info("No tool selected, using direct agent processing")
+                return await self.agent.process_query(user_message)
 
     async def _send_response(self, update: Update, response: str):
         """

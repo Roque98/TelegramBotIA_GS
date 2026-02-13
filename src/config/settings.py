@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     environment: str = "development"
 
+    # Feature Flags
+    use_react_agent: bool = False  # Habilitar nuevo agente ReAct
+    react_fallback_on_error: bool = True  # Usar LLMAgent como fallback si ReAct falla
+
     @property
     def database_url(self) -> str:
         """Construir URL de conexión a la base de datos."""
