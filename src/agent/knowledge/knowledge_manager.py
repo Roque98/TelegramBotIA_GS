@@ -5,7 +5,7 @@ Proporciona funcionalidades para buscar y acceder al conocimiento
 institucional de la empresa.
 """
 import logging
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Any
 from .company_knowledge import KnowledgeEntry  # get_knowledge_base, get_entries_by_category
 from .knowledge_categories import KnowledgeCategory
 from .knowledge_repository import KnowledgeRepository
@@ -30,47 +30,49 @@ class KnowledgeManager:
         >>> print(results[0].answer)
     """
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(self, db_manager: Optional[DatabaseManager] = None, id_rol: Optional[int] = None):
         """
         Inicializar el gestor de conocimiento.
 
         Args:
             db_manager: Gestor de base de datos (opcional)
+            id_rol: ID del rol del usuario para filtrar conocimiento (opcional)
         """
         self.repository = KnowledgeRepository(db_manager)
         self.knowledge_base = []
         self.source = "unknown"
+        self.id_rol = id_rol  # ID del rol para filtrado de permisos
 
         # Intentar cargar desde BD primero
         try:
             if self.repository.health_check():
-                self.knowledge_base = self.repository.get_all_entries()
-                if self.knowledge_base:
-                    self.source = "database"
+                # Cargar entradas filtradas por rol si se especifica
+                if id_rol is not None:
+                    self.knowledge_base = self.repository.get_all_entries_by_role(id_rol)
                     logger.info(
-                        f"✅ KnowledgeManager inicializado desde BD "
+                        f"✅ KnowledgeManager inicializado desde BD para rol {id_rol} "
                         f"con {len(self.knowledge_base)} entradas"
                     )
                 else:
-                    # BD vacía, usar código
-                    raise ValueError("Base de datos sin entradas")
+                    self.knowledge_base = self.repository.get_all_entries()
+                    logger.info(
+                        f"✅ KnowledgeManager inicializado desde BD "
+                        f"con {len(self.knowledge_base)} entradas (sin filtro de rol)"
+                    )
+
+                if self.knowledge_base:
+                    self.source = "database"
+                else:
+                    # BD vacía o sin permisos
+                    if id_rol is not None:
+                        logger.warning(f"Rol {id_rol} no tiene acceso a ninguna categoría de conocimiento")
+                    else:
+                        raise ValueError("Base de datos sin entradas")
             else:
                 # Health check falló
                 raise ConnectionError("Base de datos no disponible")
 
         except Exception as e:
-            # Fallback a código - COMENTADO: Solo usar BD
-            # logger.warning(
-            #     f"⚠️ No se pudo cargar desde BD ({e}), "
-            #     f"usando conocimiento desde código"
-            # )
-            # self.knowledge_base = get_knowledge_base()
-            # self.source = "code"
-            # logger.info(
-            #     f"📝 KnowledgeManager inicializado desde código "
-            #     f"con {len(self.knowledge_base)} entradas"
-            # )
-
             # Solo usar BD - fallar si no está disponible
             logger.error(f"❌ No se pudo cargar conocimiento desde BD: {e}")
             self.knowledge_base = []
@@ -102,6 +104,14 @@ class KnowledgeManager:
             True
         """
         query_lower = query.lower()
+
+        # NUEVO: Detectar si se está preguntando por una categoría específica
+        category_from_query = self._detect_category_in_query(query_lower)
+        if category_from_query and not category_filter:
+            logger.info(f"Detectada pregunta sobre categoría: {category_from_query.value}")
+            # Si detectamos una categoría, buscar todas las entradas de esa categoría
+            return self.get_entries_by_category(category_from_query, top_k=top_k)
+
         scored_entries = []
 
         # Filtrar por categoría si se especifica (desde self.knowledge_base, no desde código)
@@ -224,7 +234,7 @@ class KnowledgeManager:
         """Obtener todas las categorías disponibles."""
         return KnowledgeCategory.get_all()
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
         Obtener estadísticas de la base de conocimiento.
 
@@ -309,6 +319,98 @@ class KnowledgeManager:
             logger.error(f"Error al recargar desde BD: {e}")
             return False
 
+    def _detect_category_in_query(self, query_lower: str) -> Optional[KnowledgeCategory]:
+        """
+        Detectar si la query pregunta sobre una categoría específica.
+
+        Args:
+            query_lower: Query normalizada a minúsculas
+
+        Returns:
+            KnowledgeCategory si se detecta, None si no
+
+        Example:
+            >>> manager._detect_category_in_query("qué sabes sobre sistemas")
+            <KnowledgeCategory.SISTEMAS: 'sistemas'>
+        """
+        # Palabras que indican pregunta sobre categoría
+        category_indicators = [
+            "qué sabes sobre",
+            "que sabes sobre",
+            "qué sabes de",
+            "que sabes de",
+            "información sobre",
+            "informacion sobre",
+            "háblame de",
+            "hablame de",
+            "cuéntame sobre",
+            "cuentame sobre",
+            "dime sobre",
+            "dime de"
+        ]
+
+        # Verificar si hay un indicador de pregunta por categoría
+        is_category_question = any(indicator in query_lower for indicator in category_indicators)
+
+        if not is_category_question:
+            return None
+
+        # Mapeo de palabras clave a categorías
+        category_keywords = {
+            KnowledgeCategory.SISTEMAS: ["sistemas", "sistema", "aplicaciones", "aplicación", "software", "herramientas"],
+            KnowledgeCategory.PROCESOS: ["procesos", "proceso", "procedimientos", "procedimiento", "flujos", "flujo"],
+            KnowledgeCategory.POLITICAS: ["políticas", "politicas", "política", "politica", "normas", "norma", "reglas", "regla"],
+            KnowledgeCategory.FAQS: ["faqs", "faq", "preguntas frecuentes", "preguntas comunes", "dudas"],
+            KnowledgeCategory.CONTACTOS: ["contactos", "contacto", "teléfonos", "telefono", "correos", "correo"],
+            KnowledgeCategory.RECURSOS_HUMANOS: ["recursos humanos", "rrhh", "rh", "personal", "empleados", "empleado"],
+            KnowledgeCategory.BASE_DATOS: ["base datos", "base de datos", "bd", "tablas", "tabla", "datos"]
+        }
+
+        # Buscar qué categoría se menciona
+        for category, keywords in category_keywords.items():
+            if any(keyword in query_lower for keyword in keywords):
+                return category
+
+        return None
+
+    def get_entries_by_category(
+        self,
+        category: KnowledgeCategory,
+        top_k: int = 5
+    ) -> List[KnowledgeEntry]:
+        """
+        Obtener entradas de una categoría específica.
+
+        Args:
+            category: Categoría a buscar
+            top_k: Número máximo de resultados
+
+        Returns:
+            Lista de entradas de la categoría (hasta top_k)
+
+        Example:
+            >>> entries = manager.get_entries_by_category(KnowledgeCategory.SISTEMAS, top_k=3)
+            >>> all(e.category == KnowledgeCategory.SISTEMAS for e in entries)
+            True
+        """
+        category_entries = [
+            entry for entry in self.knowledge_base
+            if entry.category == category
+        ]
+
+        # Ordenar por prioridad (mayor = más importante)
+        category_entries.sort(key=lambda e: e.priority, reverse=True)
+
+        result = category_entries[:top_k]
+
+        logger.info(
+            f"Obtenidas {len(result)} entradas de categoría {category.value} "
+            f"(total en categoría: {len(category_entries)})"
+        )
+
+        return result
+
     def __repr__(self) -> str:
         """Representación del manager."""
-        return f"KnowledgeManager(entries={len(self.knowledge_base)}, source='{self.source}')"
+        role_info = f", role={self.id_rol}" if self.id_rol is not None else ""
+        return f"KnowledgeManager(entries={len(self.knowledge_base)}, source='{self.source}'{role_info})"

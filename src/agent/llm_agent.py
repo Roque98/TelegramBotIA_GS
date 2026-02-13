@@ -16,8 +16,13 @@ from .sql.sql_generator import SQLGenerator
 from .sql.sql_validator import SQLValidator
 from .formatters.response_formatter import ResponseFormatter
 from .prompts import get_default_manager
+from .memory import MemoryManager
+from .conversation_history import ConversationHistory
 
 logger = logging.getLogger(__name__)
+
+# Conjunto para mantener referencias a tareas en background
+_background_tasks = set()
 
 
 class LLMAgent:
@@ -53,6 +58,12 @@ class LLMAgent:
             llm_provider=self.llm_provider,
             use_natural_language=True
         )
+
+        # Inicializar gestor de memoria persistente
+        self.memory_manager = MemoryManager(self.db_manager, self.llm_provider)
+
+        # Inicializar historial conversacional (últimos 3 mensajes)
+        self.conversation_history = ConversationHistory(max_messages=3)
 
         logger.info(
             f"Agente LLM inicializado con proveedor: {self.llm_provider.get_provider_name()}, "
@@ -102,7 +113,12 @@ class LLMAgent:
             return "***"
         return f"{token[:4]}...{token[-4:]}"
 
-    async def process_query(self, user_query: str) -> str:
+    async def process_query(
+        self,
+        user_query: str,
+        user_id: Optional[int] = None,
+        user_name: Optional[str] = None
+    ) -> str:
         """
         Procesar una consulta del usuario.
 
@@ -114,61 +130,125 @@ class LLMAgent:
 
         Args:
             user_query: Consulta en lenguaje natural del usuario
+            user_id: ID del usuario para memoria persistente (opcional)
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Respuesta formateada para el usuario
         """
+        # Guardar mensaje del usuario en el historial conversacional
+        if user_id:
+            self.conversation_history.add_user_message(user_id, user_query)
+
+        # Obtener contexto de memoria persistente y conversacional
+        memory_context = ""
+        conversation_context = ""
+        if user_id:
+            memory_context = self.memory_manager.get_memory_context(user_id)
+            conversation_context = self.conversation_history.get_context_string(user_id, include_last_n=2)
+
+        # Combinar contextos
+        full_context = ""
+        if conversation_context:
+            full_context += conversation_context + "\n"
+        if memory_context:
+            full_context += memory_context
+
         try:
             # 1. Clasificar la consulta
             query_type = await self.query_classifier.classify(user_query)
 
             # 2. Si es una consulta general, responder directamente
             if query_type == QueryType.GENERAL:
-                return await self._process_general_query(user_query)
+                response = await self._process_general_query(user_query, full_context, user_name)
+
+                # Registrar interacción para actualización de memoria (asíncrono)
+                if user_id:
+                    task = asyncio.create_task(self.memory_manager.record_interaction(user_id))
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+                    # Guardar respuesta en historial conversacional
+                    self.conversation_history.add_bot_response(user_id, response)
+
+                return response
 
             # 3. Si es conocimiento institucional, responder con knowledge base
             if query_type == QueryType.KNOWLEDGE:
-                return await self._process_knowledge_query(user_query)
+                response = await self._process_knowledge_query(user_query, full_context, user_name)
+
+                # Registrar interacción para actualización de memoria (asíncrono)
+                if user_id:
+                    task = asyncio.create_task(self.memory_manager.record_interaction(user_id))
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+                    # Guardar respuesta en historial conversacional
+                    self.conversation_history.add_bot_response(user_id, response)
+
+                return response
 
             # 4. Si requiere base de datos, seguir el flujo completo
-            return await self._process_database_query(user_query)
+            response = await self._process_database_query(user_query, user_name)
+
+            # Registrar interacción para actualización de memoria (asíncrono)
+            if user_id:
+                task = asyncio.create_task(self.memory_manager.record_interaction(user_id))
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
+                # Guardar respuesta en historial conversacional
+                self.conversation_history.add_bot_response(user_id, response)
+
+            return response
 
         except Exception as e:
             logger.error(f"Error en process_query: {e}", exc_info=True)
             return self.response_formatter.format_error(str(e), user_friendly=True)
 
-    async def _process_general_query(self, user_query: str) -> str:
+    async def _process_general_query(
+        self,
+        user_query: str,
+        memory_context: str = "",
+        user_name: Optional[str] = None
+    ) -> str:
         """
         Procesar una consulta general que no requiere base de datos.
 
-        Responde con la personalidad de Amber, recordando al usuario
-        sobre sus capacidades de información empresarial y consultas de BD.
-        El mensaje se genera dinámicamente desde la base de datos.
+        Ahora responde preguntas razonables usando el LLM.
+        Solo muestra el mensaje de capacidades para saludos o temas absurdos.
 
         Args:
             user_query: Consulta del usuario
+            memory_context: Contexto de memoria del usuario (opcional)
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
-            Respuesta de Amber sobre sus capacidades
+            Respuesta de Iris
         """
-        logger.info("Consulta general detectada - Amber responde sobre sus capacidades")
+        logger.info("Consulta general detectada")
 
         # Detectar saludos para personalizar la respuesta
         saludos = ["hola", "hello", "hi", "buenos días", "buenas tardes", "buenas noches", "hey"]
         es_saludo = any(saludo in user_query.lower() for saludo in saludos)
 
         if es_saludo:
-            # Generar mensaje dinámico desde BD
-            greeting_message = self._generate_greeting_from_db()
+            # Para saludos, generar mensaje dinámico desde BD
+            logger.info("Saludo detectado - respondiendo con capacidades")
+            greeting_message = self._generate_greeting_from_db(user_name)
             return greeting_message
-        else:
-            # Generar respuesta general con categorías desde BD
-            general_response = self._generate_general_response_from_db()
-            return general_response
 
-    def _generate_greeting_from_db(self) -> str:
+        # Para preguntas generales razonables, usar el LLM
+        logger.info("Pregunta general - respondiendo con LLM")
+        return await self._answer_general_question_with_llm(
+            user_query,
+            memory_context,
+            user_name
+        )
+
+    def _generate_greeting_from_db(self, user_name: Optional[str] = None) -> str:
         """
         Generar mensaje de saludo dinámicamente desde la BD.
+
+        Args:
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Mensaje de saludo con categorías y ejemplos desde BD
@@ -200,8 +280,10 @@ class LLMAgent:
             examples_text = "\n".join([f"• `{q}`" for q in examples])
 
             logger.info("✅ Saludo generado dinámicamente desde BD")
+            # Personalizar saludo con nombre si está disponible
+            greeting = f"👋 ¡Hola{', ' + user_name if user_name else ''}! Soy **Iris**, analista del Centro de Operaciones ✨\n\n"
             return (
-                "👋 ¡Hola! Soy **Amber**, analista del Centro de Operaciones ✨\n\n"
+                f"{greeting}"
                 "Estoy aquí para ayudarte con información sobre:\n\n"
                 f"{categories_text}\n"
                 "💡 **Ejemplos de preguntas:**\n"
@@ -212,8 +294,9 @@ class LLMAgent:
         except Exception as e:
             logger.error(f"❌ Error generando saludo desde BD: {e}", exc_info=True)
             # Fallback básico si falla la BD
+            greeting = f"👋 ¡Hola{', ' + user_name if user_name else ''}! Soy **Iris**, analista del Centro de Operaciones ✨\n\n"
             return (
-                "👋 ¡Hola! Soy **Amber**, analista del Centro de Operaciones ✨\n\n"
+                f"{greeting}"
                 "Estoy aquí para ayudarte con:\n\n"
                 "📋 Información Institucional\n"
                 "📊 Consultas de Datos\n"
@@ -221,9 +304,12 @@ class LLMAgent:
                 "¿En qué puedo ayudarte hoy? 🎯"
             )
 
-    def _generate_general_response_from_db(self) -> str:
+    def _generate_general_response_from_db(self, user_name: Optional[str] = None) -> str:
         """
         Generar respuesta general dinámicamente desde la BD.
+
+        Args:
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Mensaje con especialidades basadas en categorías de BD
@@ -255,7 +341,7 @@ class LLMAgent:
                 "🎯 **Mis especialidades:**\n\n"
                 f"{specialties_text}\n"
                 "¿Hay algo relacionado con estos temas en lo que pueda ayudarte? ✨\n\n"
-                "_Amber, siempre dispuesta a ayudar_ 💪"
+                "_Iris, siempre dispuesta a ayudar_ 💪"
             )
 
         except Exception as e:
@@ -268,15 +354,89 @@ class LLMAgent:
                 "📊 Consultas de datos\n"
                 "💡 Información de sistemas\n\n"
                 "¿Hay algo relacionado con estos temas en lo que pueda ayudarte? ✨\n\n"
-                "_Amber, siempre dispuesta a ayudar_ 💪"
+                "_Iris, siempre dispuesta a ayudar_ 💪"
             )
 
-    async def _process_knowledge_query(self, user_query: str) -> str:
+    async def _answer_general_question_with_llm(
+        self,
+        user_query: str,
+        memory_context: str = "",
+        user_name: Optional[str] = None
+    ) -> str:
+        """
+        Responder preguntas generales usando el LLM.
+
+        El bot puede responder preguntas generales razonables como asistente,
+        manteniendo su personalidad de Iris.
+
+        Args:
+            user_query: Consulta del usuario
+            memory_context: Contexto de memoria del usuario (opcional)
+            user_name: Nombre del usuario para personalización (opcional)
+
+        Returns:
+            Respuesta generada por el LLM
+        """
+        # Construir prompt con personalidad de Iris
+        system_prompt = """Eres Iris, una asistente virtual amigable y profesional del Centro de Operaciones.
+
+Tu personalidad:
+- Amigable, cercana y profesional
+- Usas emojis ocasionalmente para ser más expresiva ✨
+- Te gusta ayudar y eres muy colaborativa
+- Eres clara y concisa en tus respuestas
+- Tu especialidad principal es información empresarial y consultas de datos
+
+Instrucciones:
+- Responde preguntas generales de forma útil y precisa
+- Mantén respuestas cortas (máximo 3-4 párrafos)
+- Si la pregunta es muy fuera de contexto o absurda, sugiere amablemente que tu especialidad es información empresarial
+- Firma tus mensajes como "_Iris_" cuando sea apropiado
+"""
+
+        # Agregar contexto de memoria si existe
+        if memory_context:
+            system_prompt += f"\n\nContexto del usuario:\n{memory_context}"
+
+        try:
+            # Combinar system prompt con user message
+            user_prefix = f"{user_name}: " if user_name else "Usuario: "
+            full_prompt = f"{system_prompt}\n\n{user_prefix}{user_query}\n\nIris:"
+
+            # Llamar al LLM provider
+            response = await self.llm_provider.generate(
+                prompt=full_prompt,
+                max_tokens=500
+            )
+
+            logger.info("✅ Respuesta general generada con LLM")
+            return response.strip()
+
+        except Exception as e:
+            logger.error(f"Error generando respuesta con LLM: {e}", exc_info=True)
+            # Fallback en caso de error
+            return (
+                "💭 Interesante pregunta. Sin embargo, mi especialidad principal es ayudarte con:\n\n"
+                "📋 Información institucional\n"
+                "📊 Consultas de datos empresariales\n"
+                "💡 Procesos y políticas\n\n"
+                "¿Hay algo relacionado con estos temas en lo que pueda ayudarte? ✨\n\n"
+                "_Iris, siempre lista para ayudar_ 💪"
+            )
+
+    async def _process_knowledge_query(
+        self,
+        user_query: str,
+        memory_context: str = "",
+        user_name: Optional[str] = None
+    ) -> str:
         """
         Procesar una consulta de conocimiento institucional.
 
         Args:
             user_query: Consulta del usuario
+            memory_context: Contexto de memoria del usuario (opcional)
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Respuesta con conocimiento institucional
@@ -288,15 +448,25 @@ class LLMAgent:
 
         if not knowledge_context:
             # Si por alguna razón no hay contexto, responder con LLM general
+            logger.warning("No se obtuvo contexto de conocimiento, respondiendo con LLM general")
             return await self._process_general_query(user_query)
 
-        # Usar el sistema de prompts con contexto de conocimiento
+        # DEBUG: Log del contexto de conocimiento
+        logger.info(f"Contexto de conocimiento obtenido ({len(knowledge_context)} caracteres)")
+        logger.debug(f"Contexto: {knowledge_context[:500]}...")
+
+        # Usar el sistema de prompts con contexto de conocimiento y memoria
         prompt = self.prompt_manager.get_prompt(
             'general_response',
             version=2,
             user_query=user_query,
-            context=knowledge_context
+            context=knowledge_context,
+            user_memory=memory_context,
+            user_name=user_name or ""
         )
+
+        # DEBUG: Log del prompt completo (primeras 1000 caracteres)
+        logger.debug(f"Prompt enviado al LLM: {prompt[:1000]}...")
 
         try:
             response = await self.llm_provider.generate(prompt, max_tokens=1024)
@@ -307,15 +477,20 @@ class LLMAgent:
             return (
                 "❌ Oh, tuve un problema procesando esa pregunta.\n\n"
                 "¿Podrías intentarlo de nuevo o reformularla?\n\n"
-                "_Amber está aquí para ayudarte_ ✨"
+                "_Iris está aquí para ayudarte_ ✨"
             )
 
-    async def _process_database_query(self, user_query: str) -> str:
+    async def _process_database_query(
+        self,
+        user_query: str,
+        user_name: Optional[str] = None
+    ) -> str:
         """
         Procesar una consulta que requiere acceso a base de datos.
 
         Args:
             user_query: Consulta del usuario
+            user_name: Nombre del usuario para personalización (opcional)
 
         Returns:
             Respuesta formateada con resultados
@@ -332,7 +507,7 @@ class LLMAgent:
             return (
                 "🤔 Hmm, tuve dificultades generando la consulta para eso.\n\n"
                 "¿Podrías reformular tu pregunta de otra manera?\n\n"
-                "_Amber intentando ayudarte_ 💪"
+                "_Iris intentando ayudarte_ 💪"
             )
 
         # 3. Validar SQL
@@ -343,7 +518,7 @@ class LLMAgent:
             return (
                 "🔒 Esa consulta no pasó las validaciones de seguridad.\n\n"
                 "Por tu seguridad, solo puedo ejecutar consultas de lectura.\n\n"
-                "¿Necesitas algo más? _Amber aquí para ayudarte_ ✨"
+                "¿Necesitas algo más? _Iris aquí para ayudarte_ ✨"
             )
 
         # 4. Ejecutar la consulta
@@ -354,7 +529,7 @@ class LLMAgent:
             return (
                 "❌ Ups, tuve un problema ejecutando la consulta en la base de datos.\n\n"
                 "Esto puede ser temporal. ¿Intentamos de nuevo?\n\n"
-                "_Amber aquí para ayudarte_ 💪"
+                "_Iris aquí para ayudarte_ 💪"
             )
 
         # 5. Formatear respuesta
@@ -362,6 +537,7 @@ class LLMAgent:
             user_query=user_query,
             sql_query=sql_query,
             results=results,
-            include_sql=False  # Cambiar a True para debugging
+            include_sql=False,  # Cambiar a True para debugging
+            user_name=user_name
         )
 
