@@ -1,9 +1,9 @@
 # Plan: Migración a Arquitectura ReAct
 
-> **Estado**: 🟡 En progreso
+> **Estado**: En progreso
 > **Última actualización**: 2024-02-13
 > **Rama Git**: `feature/react-agent-migration`
-> **Documentación**: [IMPLEMENTACION_REACT_AGENT.md](IMPLEMENTACION_REACT_AGENT.md)
+> **Archivo referencia**: `src/agent/llm_agent.py` (544 líneas)
 
 ---
 
@@ -11,30 +11,159 @@
 
 | Fase | Progreso | Tareas | Estado |
 |------|----------|--------|--------|
-| Fase 1: Foundation | ██░░░░░░░░ 20% | 2/10 | 🔄 En progreso |
-| Fase 2: Tools | ░░░░░░░░░░ 0% | 0/8 | ⏳ Pendiente |
-| Fase 3: ReAct Core | ░░░░░░░░░░ 0% | 0/10 | ⏳ Pendiente |
-| Fase 4: Single-Step Agents | ░░░░░░░░░░ 0% | 0/8 | ⏳ Pendiente |
-| Fase 5: Orchestrator | ░░░░░░░░░░ 0% | 0/6 | ⏳ Pendiente |
-| Fase 6: Integration | ░░░░░░░░░░ 0% | 0/8 | ⏳ Pendiente |
-| Fase 7: Polish | ░░░░░░░░░░ 0% | 0/6 | ⏳ Pendiente |
+| Fase 1: Foundation | ██░░░░░░░░ 20% | 2/10 | En progreso |
+| Fase 2: Tools | ░░░░░░░░░░ 0% | 0/8 | Pendiente |
+| Fase 3: ReAct Core | ░░░░░░░░░░ 0% | 0/10 | Pendiente |
+| Fase 4: Single-Step Agents | ░░░░░░░░░░ 0% | 0/8 | Pendiente |
+| Fase 5: Orchestrator | ░░░░░░░░░░ 0% | 0/6 | Pendiente |
+| Fase 6: Integration | ░░░░░░░░░░ 0% | 0/8 | Pendiente |
+| Fase 7: Polish | ░░░░░░░░░░ 0% | 0/6 | Pendiente |
 
-**Progreso Total**: █░░░░░░░░░ 4% (2/56 tareas)
+**Progreso Total**: 4% (2/56 tareas)
 
 ---
 
 ## Descripción
 
-Migrar la arquitectura actual del bot (LLMAgent monolítico de 544 líneas) a una arquitectura multi-agent basada en el paradigma **ReAct (Reasoning + Acting)**.
+### Problema Actual
 
-### Objetivos
+El `LLMAgent` actual (544 líneas) es un "God Object" con demasiadas responsabilidades:
+- Orquestación + lógica de negocio + detalles de implementación
+- Múltiples puntos de entrada inconsistentes
+- Acoplamiento fuerte entre componentes
+- Difícil de testear y mantener
+
+### Solución Propuesta
+
+Migrar a una arquitectura **multi-agent basada en ReAct (Reasoning + Acting)**:
 - Separar responsabilidades en agentes especializados
 - Implementar razonamiento paso a paso para consultas complejas
 - Mejorar testabilidad y extensibilidad
 - Mantener compatibilidad con funcionalidad actual
 
-### Estrategia
-Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitectura, migrando pieza por pieza.
+### Estrategia: Strangler Fig Pattern
+
+No reescribimos todo de una vez. Envolvemos el sistema actual con la nueva arquitectura, migrando pieza por pieza.
+
+---
+
+## Arquitectura Propuesta
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ENTRADA                                        │
+│  Telegram/API → MessageGateway → ConversationEvent                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ORCHESTRATOR                                      │
+│  1. Recibe ConversationEvent                                                │
+│  2. Obtiene contexto (MemoryService)                                        │
+│  3. Clasifica complejidad (simple vs complex)                               │
+│  4. Rutea a SingleStepAgent o ReActAgent                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ▼                               ▼
+┌───────────────────────────────┐   ┌───────────────────────────────────────┐
+│      SINGLE-STEP AGENTS       │   │            ReAct AGENT                │
+│                               │   │                                       │
+│  DatabaseAgent (SQL directo)  │   │  Loop: THOUGHT → ACTION → OBSERVE     │
+│  KnowledgeAgent (búsqueda KB) │   │                                       │
+│  ChitchatAgent (conversación) │   │  Para consultas multi-paso            │
+└───────────────────────────────┘   └───────────────────────────────────────┘
+                                                   │
+                                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TOOL REGISTRY                                  │
+│  DatabaseTool │ KnowledgeTool │ CalculateTool │ DateTimeTool                │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Qué es ReAct
+
+ReAct (Reasoning and Acting) es un paradigma donde el LLM:
+
+1. **Thought**: Razona sobre qué hacer
+2. **Action**: Ejecuta una herramienta
+3. **Observation**: Observa el resultado
+4. **Repeat**: Repite hasta tener la respuesta final
+
+**Ejemplo:**
+```
+User: "¿Quién vendió más el mes pasado y cuáles fueron sus productos top?"
+
+Thought 1: Necesito encontrar el mejor vendedor del mes pasado.
+Action 1: database_query("SELECT vendedor_id, SUM(total) as ventas FROM ventas WHERE fecha >= '2024-01-01' GROUP BY vendedor_id ORDER BY ventas DESC LIMIT 1")
+Observation 1: [{"vendedor_id": 42, "ventas": 150000}]
+
+Thought 2: Ahora necesito los productos más vendidos por el vendedor 42.
+Action 2: database_query("SELECT producto, COUNT(*) as cantidad FROM ventas WHERE vendedor_id = 42 GROUP BY producto ORDER BY cantidad DESC LIMIT 5")
+Observation 2: [{"producto": "Laptop Pro", "cantidad": 45}, ...]
+
+Thought 3: Tengo toda la información necesaria.
+Action 3: finish({"answer": "El mejor vendedor generó $150,000. Sus productos top fueron Laptop Pro (45 unidades)..."})
+```
+
+### Cuándo usar cada enfoque
+
+| Escenario | Agente | Por qué |
+|-----------|--------|---------|
+| "¿Cuántas ventas hubo ayer?" | DatabaseAgent | Una sola consulta |
+| "¿Qué es la política de devoluciones?" | KnowledgeAgent | Búsqueda simple |
+| "Hola, ¿cómo estás?" | ChitchatAgent | Conversación casual |
+| "Compara ventas de enero vs febrero" | **ReActAgent** | Requiere múltiples pasos |
+
+---
+
+## Estructura de Archivos
+
+```
+src/
+├── agents/
+│   ├── __init__.py
+│   ├── base/
+│   │   ├── __init__.py
+│   │   ├── agent.py              # BaseAgent, AgentResponse
+│   │   ├── events.py             # ConversationEvent, UserContext
+│   │   └── exceptions.py         # AgentException, ToolException
+│   │
+│   ├── orchestrator/
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py       # AgentOrchestrator
+│   │   ├── complexity_classifier.py
+│   │   └── router.py
+│   │
+│   ├── react/
+│   │   ├── __init__.py
+│   │   ├── agent.py              # ReActAgent
+│   │   ├── scratchpad.py
+│   │   ├── prompts.py
+│   │   └── schemas.py            # ReActStep, ReActResponse
+│   │
+│   ├── single_step/
+│   │   ├── __init__.py
+│   │   ├── database_agent.py
+│   │   ├── knowledge_agent.py
+│   │   └── chitchat_agent.py
+│   │
+│   └── tools/
+│       ├── __init__.py
+│       ├── base.py               # BaseTool, ToolResult
+│       ├── registry.py           # ToolRegistry
+│       ├── database_tool.py
+│       ├── knowledge_tool.py
+│       └── calculate_tool.py
+│
+├── events/
+│   ├── __init__.py
+│   └── bus.py                    # EventBus pub/sub
+│
+└── gateway/
+    └── message_gateway.py        # Normaliza input
+```
 
 ---
 
@@ -87,22 +216,121 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Archivo: `tests/agents/test_base.py`
   - Cobertura: BaseAgent, AgentResponse, UserContext, EventBus
 
+### Código de Referencia
+
+```python
+# src/agents/base/agent.py
+from abc import ABC, abstractmethod
+from pydantic import BaseModel, Field
+from typing import Any, Optional
+from datetime import datetime
+from enum import Enum
+
+class AgentType(str, Enum):
+    SINGLE_STEP = "single_step"
+    REACT = "react"
+
+class AgentResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    data: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+    agent_name: str
+    agent_type: AgentType
+    execution_time_ms: float = 0
+    steps_taken: int = 1
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def success_response(cls, agent_name: str, message: str, **kwargs) -> "AgentResponse":
+        return cls(success=True, message=message, agent_name=agent_name, **kwargs)
+
+    @classmethod
+    def error_response(cls, agent_name: str, error: str, **kwargs) -> "AgentResponse":
+        return cls(success=False, error=error, agent_name=agent_name, **kwargs)
+
+class BaseAgent(ABC):
+    name: str
+    agent_type: AgentType
+
+    @abstractmethod
+    async def execute(self, query: str, context: "UserContext", **kwargs) -> AgentResponse:
+        pass
+
+    async def health_check(self) -> bool:
+        return True
+```
+
+```python
+# src/agents/base/events.py
+from pydantic import BaseModel, Field
+from typing import Any, Optional
+from datetime import datetime
+from uuid import uuid4
+
+class ConversationEvent(BaseModel):
+    event_id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str
+    channel: str  # telegram, api, websocket
+    text: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    correlation_id: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class UserContext(BaseModel):
+    user_id: str
+    display_name: str
+    roles: list[str] = Field(default_factory=list)
+    preferences: dict[str, Any] = Field(default_factory=dict)
+    working_memory: list[dict] = Field(default_factory=list)
+    long_term_summary: Optional[str] = None
+    current_date: datetime = Field(default_factory=datetime.utcnow)
+```
+
+```python
+# src/events/bus.py
+from typing import Callable, Awaitable
+from collections import defaultdict
+import asyncio
+
+EventHandler = Callable[..., Awaitable[None]]
+
+class EventBus:
+    _instance: Optional["EventBus"] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._handlers = defaultdict(list)
+        return cls._instance
+
+    def subscribe(self, event_type: str, handler: EventHandler):
+        self._handlers[event_type].append(handler)
+
+    def unsubscribe(self, event_type: str, handler: EventHandler):
+        self._handlers[event_type].remove(handler)
+
+    async def publish(self, event_type: str, event: dict):
+        handlers = self._handlers.get(event_type, [])
+        if handlers:
+            await asyncio.gather(
+                *[handler(event) for handler in handlers],
+                return_exceptions=True
+            )
+
+event_bus = EventBus()
+```
+
 ### Entregables
 - [ ] `src/agents/base/` con todos los contratos
 - [ ] `src/events/bus.py` funcionando
 - [ ] Tests pasando con cobertura >80%
-- [ ] Documentación actualizada
-
-### Notas de Fase
-> - Usar Pydantic v2 para todos los modelos
-> - EventBus debe ser async-compatible
-> - No modificar código existente en esta fase
 
 ---
 
 ## Fase 2: Tools
 
-**Objetivo**: Implementar sistema de Tools nuevo compatible con ReAct
+**Objetivo**: Implementar sistema de Tools compatible con ReAct
 **Rama**: `feature/react-fase2-tools`
 **Dependencias**: Fase 1
 
@@ -120,11 +348,11 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Archivo: `src/agents/tools/base.py`
   - Método: `to_observation()` para ReAct
 
-- [ ] **Implementar BaseTool nuevo** - Clase abstracta para ReAct tools
+- [ ] **Implementar BaseTool** - Clase abstracta para ReAct tools
   - Archivo: `src/agents/tools/base.py`
   - Métodos: `definition`, `execute()`, `validate_params()`
 
-- [ ] **Implementar ToolRegistry nuevo** - Registro singleton
+- [ ] **Implementar ToolRegistry** - Registro singleton
   - Archivo: `src/agents/tools/registry.py`
   - Método: `get_tools_prompt()` para generar descripción de tools
 
@@ -140,10 +368,72 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Archivo: `src/agents/tools/calculate_tool.py`
   - Evaluador seguro sin `eval()`
 
+### Código de Referencia
+
+```python
+# src/agents/tools/base.py
+from abc import ABC, abstractmethod
+from pydantic import BaseModel, Field
+from typing import Any, Optional
+from enum import Enum
+
+class ToolCategory(str, Enum):
+    DATABASE = "database"
+    KNOWLEDGE = "knowledge"
+    CALCULATION = "calculation"
+    DATETIME = "datetime"
+
+class ToolParameter(BaseModel):
+    name: str
+    type: str
+    description: str
+    required: bool = True
+    default: Optional[Any] = None
+
+class ToolDefinition(BaseModel):
+    name: str
+    description: str
+    category: ToolCategory
+    parameters: list[ToolParameter]
+    examples: list[dict[str, Any]] = Field(default_factory=list)
+
+    def to_prompt_format(self) -> str:
+        params = ", ".join([f"{p.name}: {p.type}" for p in self.parameters])
+        return f"- {self.name}: {self.description}\n  Parameters: {{{params}}}"
+
+class ToolResult(BaseModel):
+    success: bool
+    data: Any = None
+    error: Optional[str] = None
+    execution_time_ms: float = 0
+
+    def to_observation(self) -> str:
+        if not self.success:
+            return f"Error: {self.error}"
+        if isinstance(self.data, list) and len(self.data) == 0:
+            return "No results found"
+        return str(self.data)
+
+class BaseTool(ABC):
+    @property
+    @abstractmethod
+    def definition(self) -> ToolDefinition:
+        pass
+
+    @abstractmethod
+    async def execute(self, **kwargs) -> ToolResult:
+        pass
+
+    def validate_params(self, params: dict) -> tuple[bool, Optional[str]]:
+        for param in self.definition.parameters:
+            if param.required and param.name not in params:
+                return False, f"Missing required parameter: {param.name}"
+        return True, None
+```
+
 ### Entregables
 - [ ] `src/agents/tools/` con todos los tools
 - [ ] Tests para cada tool
-- [ ] Documentación de cómo agregar nuevos tools
 
 ---
 
@@ -177,7 +467,6 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
 
 - [ ] **Implementar prompts ReAct** - Templates para el loop
   - Archivo: `src/agents/react/prompts.py`
-  - Templates: system prompt, step prompt
 
 - [ ] **Implementar _generate_step()** - Generar siguiente paso
   - Usa: LLM con structured output (Pydantic)
@@ -186,17 +475,56 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Integra: ToolRegistry
 
 - [ ] **Implementar _synthesize_partial()** - Respuesta si se exceden iteraciones
-  - Genera respuesta parcial con observaciones recolectadas
 
 - [ ] **Tests de integración ReAct** - Tests del loop completo
   - Archivo: `tests/agents/test_react.py`
-  - Mocks para LLM y tools
+
+### Código de Referencia
+
+```python
+# src/agents/react/agent.py
+class ReActAgent(BaseAgent):
+    name = "react"
+    agent_type = AgentType.REACT
+    MAX_ITERATIONS = 10
+
+    def __init__(self, llm: LLMGateway, tool_registry: ToolRegistry):
+        self.llm = llm
+        self.tools = tool_registry
+
+    async def execute(self, query: str, context: UserContext, **kwargs) -> AgentResponse:
+        scratchpad = Scratchpad(max_steps=self.MAX_ITERATIONS)
+
+        while not scratchpad.is_full():
+            response = await self._generate_step(query, context, scratchpad)
+
+            if response.action == ActionType.FINISH:
+                return AgentResponse.success_response(
+                    agent_name=self.name,
+                    message=response.final_answer,
+                    agent_type=self.agent_type,
+                    steps_taken=len(scratchpad.steps) + 1
+                )
+
+            observation = await self._execute_tool(response.action, response.action_input)
+            scratchpad.add_step(
+                thought=response.thought,
+                action=response.action,
+                action_input=response.action_input,
+                observation=observation
+            )
+
+        return AgentResponse.success_response(
+            agent_name=self.name,
+            message=await self._synthesize_partial(query, scratchpad),
+            metadata={"partial": True}
+        )
+```
 
 ### Entregables
 - [ ] `src/agents/react/` completo
-- [ ] ReActAgent funcionando con tools de Fase 2
+- [ ] ReActAgent funcionando con tools
 - [ ] Tests de integración pasando
-- [ ] Ejemplos documentados
 
 ---
 
@@ -227,14 +555,13 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
 - [ ] **Extraer lógica de LLMAgent** - Mover a agentes especializados
   - Refactor: Mantener LLMAgent como adapter temporal
 
-- [ ] **Tests unitarios por agente** - Tests aislados
+- [ ] **Tests unitarios por agente**
   - Archivos: `tests/agents/test_database_agent.py`, etc.
 
-- [ ] **Tests de integración** - Agentes funcionando juntos
+- [ ] **Tests de integración**
   - Archivo: `tests/agents/test_single_step_integration.py`
 
 - [ ] **Documentar patrones** - Cómo crear nuevos agentes
-  - Actualizar: `.claude/skills/python-bot-context-manager/SKILL.md`
 
 ### Entregables
 - [ ] `src/agents/single_step/` con 4 agentes
@@ -263,13 +590,33 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Archivo: `src/agents/orchestrator/router.py`
 
 - [ ] **Integrar con MemoryAgent** - Contexto automático
-  - Obtener contexto antes de ejecutar
 
 - [ ] **Tests de orquestación** - Routing correcto
   - Archivo: `tests/agents/test_orchestrator.py`
 
 - [ ] **Métricas de routing** - Logging de decisiones
-  - Para análisis y mejora del clasificador
+
+### Código de Referencia
+
+```python
+# src/agents/orchestrator/orchestrator.py
+class AgentOrchestrator:
+    def __init__(self, llm, memory_service, agents: dict[str, BaseAgent]):
+        self.llm = llm
+        self.memory = memory_service
+        self.classifier = ComplexityClassifier(llm)
+        self.agents = agents
+
+    async def handle(self, event: ConversationEvent) -> AgentResponse:
+        context = await self.memory.get_context(event.user_id)
+        complexity = await self.classifier.classify(event.text)
+
+        agent = self.agents.get(complexity.suggested_agent)
+        response = await agent.execute(query=event.text, context=context)
+
+        asyncio.create_task(self.memory.record_interaction(event, response))
+        return response
+```
 
 ### Entregables
 - [ ] `src/agents/orchestrator/` completo
@@ -301,16 +648,13 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
   - Config: `USE_REACT_ARCHITECTURE=true/false`
 
 - [ ] **LLMAgent como fallback** - Si nuevo sistema falla
-  - Mantener código existente como backup
 
 - [ ] **Tests E2E** - Flujo completo Telegram → Respuesta
   - Archivo: `tests/e2e/test_telegram_flow.py`
 
 - [ ] **Comparar métricas** - Latencia, precisión
-  - Antes vs después de migración
 
 - [ ] **Documentar rollback** - Procedimiento de emergencia
-  - En caso de problemas en producción
 
 ### Entregables
 - [ ] Handlers actualizados
@@ -330,29 +674,22 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
 
 - [ ] **Implementar tracing** - OpenTelemetry básico
   - Archivo: `src/observability/tracing.py`
-  - Traces por request completo
 
 - [ ] **Implementar métricas** - Prometheus/básicas
   - Archivo: `src/observability/metrics.py`
-  - Métricas: latencia, errores, uso por agente
 
 - [ ] **Structured logging** - Logs JSON
   - Archivo: `src/observability/logging.py`
-  - Correlation IDs
 
 - [ ] **Actualizar documentación** - Contexto y skills
-  - Archivos: `.claude/context/*.md`
 
 - [ ] **Optimización de prompts** - Reducir tokens
-  - Revisar y optimizar prompts de ReAct
 
 - [ ] **Performance tuning** - Cachés, connection pools
-  - Revisar bottlenecks
 
 ### Entregables
 - [ ] Observabilidad completa
 - [ ] Documentación actualizada
-- [ ] Performance optimizada
 - [ ] Sistema listo para producción
 
 ---
@@ -374,7 +711,7 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
 - [ ] Precisión de clasificación >= 95%
 - [ ] Cobertura de tests >= 80%
 - [ ] Zero regresiones en funcionalidad actual
-- [ ] Documentación completa
+- [ ] Código en LLMAgent reducido a < 100 líneas (solo adapter)
 
 ---
 
@@ -383,5 +720,4 @@ Usar **Strangler Fig Pattern**: envolver el sistema actual con la nueva arquitec
 | Fecha | Cambio | Autor |
 |-------|--------|-------|
 | 2024-02-13 | Creación del plan | Claude |
-| 2024-02-13 | Estructura de carpetas y documentación | Claude |
-| 2024-02-13 | Formato con TODOs | Claude |
+| 2024-02-13 | Consolidación de documentos | Claude |
