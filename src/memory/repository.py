@@ -114,6 +114,7 @@ class MemoryRepository:
 
         try:
             # Intentar obtener desde UserMemoryProfiles
+            # user_id puede ser Telegram chat ID, así que buscamos a través de UsuariosTelegram
             query = """
                 SELECT
                     u.idUsuario AS Id_Usuario,
@@ -123,12 +124,14 @@ class MemoryRepository:
                     ump.resumenHistorialBreve AS resumen_historial_breve,
                     ump.numInteracciones AS num_interacciones,
                     ump.ultimaActualizacion AS ultima_actualizacion
-                FROM abcmasplus..Usuarios u
+                FROM abcmasplus..UsuariosTelegram ut
+                INNER JOIN abcmasplus..Usuarios u ON ut.idUsuario = u.idUsuario
                 LEFT JOIN abcmasplus..UserMemoryProfiles ump ON u.idUsuario = ump.idUsuario
-                WHERE u.idUsuario = :user_id
+                WHERE ut.telegramChatId = :user_id
+                  AND ut.activo = 1
             """
 
-            results = self.db_manager.execute_query(query, {"user_id": int(user_id)})
+            results = self.db_manager.execute_query(query, {"user_id": str(user_id)})
 
             if not results:
                 return None
@@ -226,19 +229,22 @@ class MemoryRepository:
             return []
 
         try:
+            # user_id es Telegram chat ID, buscar idUsuario interno
             query = """
                 SELECT TOP (:limit)
-                    idOperacion AS Comando,
-                    parametros AS Parametros,
-                    resultado AS Resultado,
-                    fechaEjecucion AS Fecha_Hora
-                FROM abcmasplus..LogOperaciones
-                WHERE idUsuario = :user_id
-                ORDER BY fechaEjecucion DESC
+                    lo.idOperacion AS Comando,
+                    lo.parametros AS Parametros,
+                    lo.resultado AS Resultado,
+                    lo.fechaEjecucion AS Fecha_Hora
+                FROM abcmasplus..LogOperaciones lo
+                INNER JOIN abcmasplus..UsuariosTelegram ut ON lo.idUsuario = ut.idUsuario
+                WHERE ut.telegramChatId = :user_id
+                  AND ut.activo = 1
+                ORDER BY lo.fechaEjecucion DESC
             """
 
             results = self.db_manager.execute_query(
-                query, {"user_id": int(user_id), "limit": limit}
+                query, {"user_id": str(user_id), "limit": limit}
             )
 
             messages = []
