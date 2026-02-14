@@ -16,6 +16,7 @@ from src.agents.tools.database_tool import DatabaseTool
 from src.agents.tools.knowledge_tool import KnowledgeTool
 from src.agents.tools.calculate_tool import CalculateTool
 from src.agents.tools.datetime_tool import DateTimeTool
+from src.agent.knowledge import KnowledgeManager
 from src.config.settings import settings
 from src.memory.service import MemoryService
 from src.memory.repository import MemoryRepository
@@ -32,12 +33,14 @@ logger = logging.getLogger(__name__)
 
 def create_tool_registry(
     db_manager: Optional[Any] = None,
+    knowledge_manager: Optional[Any] = None,
 ) -> ToolRegistry:
     """
     Crea y configura el registro de herramientas.
 
     Args:
         db_manager: Gestor de base de datos
+        knowledge_manager: Gestor de conocimiento
 
     Returns:
         ToolRegistry configurado
@@ -46,9 +49,12 @@ def create_tool_registry(
     ToolRegistry.reset()
     registry = ToolRegistry()
 
+    # Crear KnowledgeManager si no se proporciona
+    km = knowledge_manager or KnowledgeManager()
+
     # Registrar herramientas
     registry.register(DatabaseTool(db_manager=db_manager))
-    registry.register(KnowledgeTool())
+    registry.register(KnowledgeTool(knowledge_manager=km))
     registry.register(CalculateTool())
     registry.register(DateTimeTool())
 
@@ -60,6 +66,7 @@ def create_tool_registry(
 def create_react_agent(
     llm_provider: Any,
     db_manager: Optional[Any] = None,
+    knowledge_manager: Optional[Any] = None,
 ) -> ReActAgent:
     """
     Crea el agente ReAct con sus dependencias.
@@ -67,11 +74,12 @@ def create_react_agent(
     Args:
         llm_provider: Proveedor de LLM
         db_manager: Gestor de base de datos
+        knowledge_manager: Gestor de conocimiento
 
     Returns:
         ReActAgent configurado
     """
-    tool_registry = create_tool_registry(db_manager)
+    tool_registry = create_tool_registry(db_manager, knowledge_manager)
 
     agent = ReActAgent(
         llm=llm_provider,
@@ -132,10 +140,16 @@ def create_main_handler(
     # Usar el DB manager del llm_agent si no se proporciona uno
     db = db_manager or llm_agent.db_manager
 
+    # Obtener knowledge_manager del llm_agent
+    knowledge_manager = getattr(
+        llm_agent.query_classifier, 'knowledge_manager', None
+    )
+
     # Crear componentes
     react_agent = create_react_agent(
         llm_provider=llm_agent.llm_provider,
         db_manager=db,
+        knowledge_manager=knowledge_manager,
     )
 
     memory_service = create_memory_service(db_manager=db)
