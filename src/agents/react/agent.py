@@ -296,9 +296,11 @@ class ReActAgent(BaseAgent):
         """
         # Construir prompt de usuario
         if scratchpad.is_empty():
+            prompt_context = context.to_prompt_context()
+            logger.debug(f"[DEBUG] User context for prompt:\n{prompt_context}")
             user_prompt = build_user_prompt(
                 query=query,
-                user_context=context.to_prompt_context(),
+                user_context=prompt_context,
                 scratchpad="",
             )
         else:

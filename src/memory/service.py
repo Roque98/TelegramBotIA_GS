@@ -129,6 +129,13 @@ class MemoryService:
             include_long_term=include_long_term,
         )
 
+        logger.info(
+            f"[DEBUG] Context built for {user_id}: "
+            f"name={context.display_name}, "
+            f"working_memory={len(context.working_memory)} msgs, "
+            f"has_summary={context.long_term_summary is not None}"
+        )
+
         # Guardar en cache
         await self._add_to_cache(cache_key, context)
 
