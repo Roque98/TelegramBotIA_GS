@@ -309,11 +309,11 @@ class ReActAgent(BaseAgent):
         messages.append({"role": "user", "content": user_prompt})
 
         try:
+            # Convertir mensajes a prompt string para el provider
+            prompt = self._messages_to_prompt(messages)
+
             # Generar respuesta
-            response_text = await self.llm.generate(
-                messages=messages,
-                temperature=self.temperature,
-            )
+            response_text = await self.llm.generate(prompt=prompt)
 
             # Parsear JSON
             react_response = self._parse_response(response_text)
@@ -377,6 +377,30 @@ class ReActAgent(BaseAgent):
             action_input=data.get("action_input", {}),
             final_answer=data.get("final_answer"),
         )
+
+    def _messages_to_prompt(self, messages: list[dict[str, str]]) -> str:
+        """
+        Convierte lista de mensajes a un prompt string.
+
+        Args:
+            messages: Lista de mensajes con role y content
+
+        Returns:
+            Prompt formateado como string
+        """
+        parts = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            if role == "system":
+                parts.append(f"[Sistema]\n{content}\n")
+            elif role == "user":
+                parts.append(f"[Usuario]\n{content}\n")
+            elif role == "assistant":
+                parts.append(f"[Asistente]\n{content}\n")
+
+        return "\n".join(parts)
 
     async def _execute_tool(
         self,
@@ -444,10 +468,8 @@ class ReActAgent(BaseAgent):
                 {"role": "user", "content": synthesis_prompt},
             ]
 
-            response_text = await self.llm.generate(
-                messages=messages,
-                temperature=0.3,
-            )
+            prompt = self._messages_to_prompt(messages)
+            response_text = await self.llm.generate(prompt=prompt)
 
             # Intentar parsear como JSON
             try:
