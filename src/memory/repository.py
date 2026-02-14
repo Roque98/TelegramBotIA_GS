@@ -116,16 +116,16 @@ class MemoryRepository:
             # Intentar obtener desde UserMemoryProfiles
             query = """
                 SELECT
-                    u.Id_Usuario,
-                    u.Nombre,
-                    ump.resumen_contexto_laboral,
-                    ump.resumen_temas_recientes,
-                    ump.resumen_historial_breve,
-                    ump.num_interacciones,
-                    ump.ultima_actualizacion
-                FROM Usuarios u
-                LEFT JOIN UserMemoryProfiles ump ON u.Id_Usuario = ump.id_usuario
-                WHERE u.Id_Usuario = :user_id
+                    u.idUsuario AS Id_Usuario,
+                    u.nombreUsuario AS Nombre,
+                    ump.resumenContextoLaboral AS resumen_contexto_laboral,
+                    ump.resumenTemasRecientes AS resumen_temas_recientes,
+                    ump.resumenHistorialBreve AS resumen_historial_breve,
+                    ump.numInteracciones AS num_interacciones,
+                    ump.ultimaActualizacion AS ultima_actualizacion
+                FROM abcmasplus..Usuarios u
+                LEFT JOIN abcmasplus..UserMemoryProfiles ump ON u.idUsuario = ump.idUsuario
+                WHERE u.idUsuario = :user_id
             """
 
             results = self.db_manager.execute_query(query, {"user_id": int(user_id)})
@@ -227,14 +227,14 @@ class MemoryRepository:
 
         try:
             query = """
-                SELECT TOP :limit
-                    Comando,
-                    Parametros,
-                    Resultado,
-                    Fecha_Hora
-                FROM LogOperaciones
-                WHERE Id_Usuario = :user_id
-                ORDER BY Fecha_Hora DESC
+                SELECT TOP (:limit)
+                    comando AS Comando,
+                    parametros AS Parametros,
+                    resultado AS Resultado,
+                    fechaEjecucion AS Fecha_Hora
+                FROM abcmasplus..LogOperaciones
+                WHERE idUsuario = :user_id
+                ORDER BY fechaEjecucion DESC
             """
 
             results = self.db_manager.execute_query(
