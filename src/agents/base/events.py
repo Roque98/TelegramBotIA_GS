@@ -187,4 +187,11 @@ class UserContext(BaseModel):
         if self.long_term_summary:
             lines.append(f"Historial: {self.long_term_summary}")
 
+        if self.working_memory:
+            lines.append("\nMensajes recientes de esta conversación:")
+            for msg in self.working_memory[-5:]:  # Últimos 5 mensajes
+                role = msg.get("role", "user")
+                content = msg.get("content", "")[:200]  # Truncar si muy largo
+                lines.append(f"  [{role}]: {content}")
+
         return "\n".join(lines)
