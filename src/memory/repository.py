@@ -117,7 +117,7 @@ class MemoryRepository:
             query = """
                 SELECT
                     u.idUsuario AS Id_Usuario,
-                    u.nombreUsuario AS Nombre,
+                    CONCAT(u.nombre, ' ', u.apellido) AS Nombre,
                     ump.resumenContextoLaboral AS resumen_contexto_laboral,
                     ump.resumenTemasRecientes AS resumen_temas_recientes,
                     ump.resumenHistorialBreve AS resumen_historial_breve,
@@ -228,7 +228,7 @@ class MemoryRepository:
         try:
             query = """
                 SELECT TOP (:limit)
-                    comando AS Comando,
+                    idOperacion AS Comando,
                     parametros AS Parametros,
                     resultado AS Resultado,
                     fechaEjecucion AS Fecha_Hora
