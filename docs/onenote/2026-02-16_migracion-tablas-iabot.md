@@ -172,8 +172,6 @@ Adicionalmente, se actualiza la estructura de las tablas de usuarios para reflej
 
 | Archivo | Cambios necesarios |
 |---|---|
-| `src/config/settings.py` | Agregar config para BD consolamonitoreo |
-| `src/database/connection.py` | Soporte para doble conexión |
 | `src/auth/registration.py` | Nuevas referencias de tablas + nuevas columnas Usuarios |
 | `src/auth/user_manager.py` | Nuevas referencias de tablas + nuevas columnas |
 | `src/auth/permission_checker.py` | Nuevas referencias de tablas + SPs renombrados |
@@ -190,11 +188,10 @@ Adicionalmente, se actualiza la estructura de las tablas de usuarios para reflej
 
 ## Consideraciones Técnicas
 
-1. **Cross-database queries**: Las tablas en consolamonitoreo que hacen JOIN con Usuarios/Gerencias deben usar `ABCMASplus.dbo.Usuarios`
+1. **Sin segunda conexión**: No se necesita configurar una segunda BD. Se usan nombres fully qualified en las queries: `ABCMASplus.dbo.Usuarios`, `consolamonitoreo.dbo.IABOT_Roles`, etc.
 2. **Permisos SQL Server**: El usuario de BD necesita permisos en ambas bases de datos
-3. **ConnectionString**: Se necesita una segunda connection string para consolamonitoreo
-4. **FK cross-database**: SQL Server no soporta FK entre bases de datos - la integridad referencial se mantiene a nivel de aplicación
-5. **SPs cross-database**: Los SPs en consolamonitoreo pueden referenciar tablas en ABCMASplus usando nombre completo
+3. **FK cross-database**: SQL Server no soporta FK entre bases de datos - la integridad referencial se mantiene a nivel de aplicación
+4. **SPs cross-database**: Los SPs en consolamonitoreo pueden referenciar tablas en ABCMASplus usando nombre completo
 
 ---
 
@@ -203,12 +200,10 @@ Adicionalmente, se actualiza la estructura de las tablas de usuarios para reflej
 | Fase | Descripción | Estado | Progreso |
 |------|-------------|--------|----------|
 | 1 | Scripts SQL de migración | Pendiente | 0% |
-| 2 | Configuración del proyecto | Pendiente | 0% |
-| 3 | Actualizar código (tablas renombradas) | Pendiente | 0% |
-| 4 | Actualizar código (nueva estructura Usuarios) | Pendiente | 0% |
-| 5 | Referencias cross-database | Pendiente | 0% |
-| 6 | Documentación | Pendiente | 0% |
-| 7 | Testing | Pendiente | 0% |
+| 2 | Actualizar código (tablas renombradas con fully qualified names) | Pendiente | 0% |
+| 3 | Actualizar código (nueva estructura Usuarios) | Pendiente | 0% |
+| 4 | Documentación | Pendiente | 0% |
+| 5 | Testing | Pendiente | 0% |
 
 **Progreso total: 0%**
 

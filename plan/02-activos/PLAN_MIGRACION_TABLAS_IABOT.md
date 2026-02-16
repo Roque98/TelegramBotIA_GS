@@ -119,34 +119,24 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 - [ ] Crear script para recrear vistas en consolamonitoreo
 - [ ] Crear script de rollback
 
-### Fase 2: Actualizar Configuración del Proyecto
-- [ ] Actualizar `src/config/settings.py` - agregar configuración para segunda base de datos (`consolamonitoreo`)
-- [ ] Actualizar `src/database/connection.py` - soporte para conexiones a ambas bases de datos
-- [ ] Actualizar `.env` / variables de entorno con nueva conexión
-
-### Fase 3: Actualizar Código Python - Tablas Renombradas
-- [ ] `src/auth/registration.py` - Actualizar referencias a UsuariosTelegram → IABOT_UsuariosTelegram
-- [ ] `src/auth/user_manager.py` - Actualizar referencias a UsuariosTelegram, Roles, LogOperaciones
-- [ ] `src/auth/permission_checker.py` - Actualizar referencias a Operaciones, RolesOperaciones, SPs
-- [ ] `src/memory/repository.py` - Actualizar referencias a UserMemoryProfiles, LogOperaciones
-- [ ] `src/agent/memory/memory_repository.py` - Actualizar referencias a UserMemoryProfiles, LogOperaciones
-- [ ] `src/agent/knowledge/knowledge_repository.py` - Actualizar referencias a knowledge_entries, knowledge_categories, RolesCategoriesKnowledge
-- [ ] `src/agents/tools/preference_tool.py` - Actualizar referencias a UserMemoryProfiles, UsuariosTelegram
+### Fase 2: Actualizar Código Python - Tablas Renombradas
+- [ ] `src/auth/registration.py` - Actualizar referencias: `consolamonitoreo.dbo.IABOT_UsuariosTelegram`
+- [ ] `src/auth/user_manager.py` - Actualizar referencias: IABOT_UsuariosTelegram, IABOT_Roles, IABOT_LogOperaciones (con prefijo `consolamonitoreo.dbo.`)
+- [ ] `src/auth/permission_checker.py` - Actualizar referencias: IABOT_Operaciones, IABOT_RolesOperaciones, SPs renombrados
+- [ ] `src/memory/repository.py` - Actualizar referencias: IABOT_UserMemoryProfiles, IABOT_LogOperaciones
+- [ ] `src/agent/memory/memory_repository.py` - Actualizar referencias: IABOT_UserMemoryProfiles, IABOT_LogOperaciones
+- [ ] `src/agent/knowledge/knowledge_repository.py` - Actualizar referencias: IABOT_knowledge_entries, IABOT_knowledge_categories, IABOT_RolesCategoriesKnowledge
+- [ ] `src/agents/tools/preference_tool.py` - Actualizar referencias: IABOT_UserMemoryProfiles, IABOT_UsuariosTelegram
 - [ ] `src/agents/tools/database_tool.py` - Actualizar queries genéricas
 
-### Fase 4: Actualizar Código Python - Nueva Estructura de Usuarios
+### Fase 3: Actualizar Código Python - Nueva Estructura de Usuarios
 - [ ] Actualizar modelos/schemas que referencian columnas de Usuarios (nueva estructura: Nombre, Password, idRol, email, puesto, UltimoAcceso, EstatusLDAP, TipoCuentaLDAP, Empresa, Activa)
 - [ ] Actualizar modelos/schemas de Gerencias (nueva estructura: idGerente, idResponsable, Gerencia, CentroCostos, idDireccion, GrupoDeCorreo, id_ChatTelegram, Nickname)
 - [ ] Actualizar modelos/schemas de GerenciasUsuarios (estructura simplificada: IdGerencia, IdUsuario)
 - [ ] Actualizar queries en `src/auth/user_manager.py` para usar nuevas columnas
 - [ ] Actualizar queries en `src/auth/registration.py` para usar nuevas columnas
 
-### Fase 5: Actualizar Referencias Cross-Database
-- [ ] Las queries que JOINean tablas del bot con Usuarios/Gerencias deben usar referencia cross-database: `ABCMASplus.dbo.Usuarios`
-- [ ] Las queries dentro de consolamonitoreo usan nombres directos: `IABOT_Roles`, `IABOT_Operaciones`, etc.
-- [ ] Actualizar SPs para referenciar cross-database donde sea necesario
-
-### Fase 6: Actualizar Documentación
+### Fase 4: Actualizar Documentación
 - [ ] Actualizar `.claude/context/DATABASE.md` con nueva estructura
 - [ ] Actualizar `docs/sql/00 ResumenEstructura.sql`
 - [ ] Actualizar `docs/sql/01 EstructuraUsuarios.sql`
@@ -155,7 +145,7 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 - [ ] Actualizar `docs/sql/04 StoredProcedures.sql`
 - [ ] Crear nueva migración en `database/migrations/`
 
-### Fase 7: Testing
+### Fase 5: Testing
 - [ ] Verificar que la conexión a ambas bases de datos funcione
 - [ ] Verificar autenticación y registro de usuarios
 - [ ] Verificar sistema de permisos
@@ -167,11 +157,6 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 ---
 
 ## Archivos Afectados (Resumen)
-
-### Configuración
-- `src/config/settings.py`
-- `src/database/connection.py`
-- `.env`
 
 ### Autenticación y Permisos
 - `src/auth/registration.py`
@@ -198,9 +183,9 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 
 ## Consideraciones Importantes
 
-1. **Cross-database queries**: Las tablas en `consolamonitoreo` que hacen JOIN con `Usuarios` deben usar `ABCMASplus.dbo.Usuarios`
+1. **Sin segunda conexión**: No se necesita configurar una segunda BD en el código. Se usan nombres fully qualified en las queries: `ABCMASplus.dbo.Usuarios`, `consolamonitoreo.dbo.IABOT_Roles`, etc.
 2. **Permisos SQL Server**: El usuario de la aplicación necesita permisos en ambas bases de datos
-3. **Transacciones cross-database**: SQL Server soporta transacciones distribuidas pero evaluar si es necesario
+3. **FK cross-database**: SQL Server no soporta FK entre bases de datos - la integridad referencial se mantiene a nivel de aplicación
 4. **Rollback**: Mantener script de rollback por si se necesita revertir
 5. **Compatibilidad**: La tabla Usuarios de ABCMASplus tiene estructura diferente a la documentada - adaptar el código
 
