@@ -118,14 +118,21 @@ class ReActAgent(BaseAgent):
 
         # Iniciar tracing si está disponible
         tracer = get_tracer() if _OBSERVABILITY_AVAILABLE else None
+        trace_ctx = None
         if tracer:
-            tracer.start_trace(
+            trace_ctx = tracer.start_trace(
                 user_id=context.user_id,
                 channel=kwargs.get("channel", "unknown"),
                 metadata={"query_length": len(query)},
             )
 
-        logger.info(f"Ejecutando ReAct para: '{query[:50]}...'")
+        trace_id_short = trace_ctx.trace_id[:8] if trace_ctx else "-"
+        logger.info(
+            f">>> REQUEST START [{trace_id_short}] "
+            f"query='{query[:80]}'"
+        )
+
+        tools_used: list[str] = []
 
         try:
             # Construir prompts base
@@ -145,10 +152,7 @@ class ReActAgent(BaseAgent):
                 if react_response.is_final():
                     elapsed_ms = (time.perf_counter() - start_time) * 1000
                     steps = len(scratchpad) + 1
-                    logger.info(
-                        f"ReAct completado en {steps} pasos, "
-                        f"{elapsed_ms:.2f}ms"
-                    )
+                    self._log_request_end(trace_id_short, "ok", steps, elapsed_ms, tools_used)
 
                     # Registrar métricas
                     if _OBSERVABILITY_AVAILABLE:
@@ -176,6 +180,8 @@ class ReActAgent(BaseAgent):
                     context=context,
                 )
 
+                tools_used.append(react_response.action.value)
+
                 # Registrar uso de tool
                 if _OBSERVABILITY_AVAILABLE:
                     get_metrics().record_tool_usage(react_response.action.value)
@@ -191,10 +197,8 @@ class ReActAgent(BaseAgent):
                 logger.debug(f"Paso {len(scratchpad)}: {react_response.action.value}")
 
             # Excedimos iteraciones - sintetizar respuesta parcial
-            logger.warning(
-                f"Max iterations reached ({self.max_iterations}), synthesizing partial"
-            )
             elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._log_request_end(trace_id_short, "partial", len(scratchpad), elapsed_ms, tools_used)
             partial_answer = await self._synthesize_partial(query, scratchpad)
 
             # Registrar métricas (partial se considera success)
@@ -222,7 +226,7 @@ class ReActAgent(BaseAgent):
 
         except MaxIterationsException as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(f"Max iterations exception: {e}")
+            self._log_request_end(trace_id_short, "error:max_iterations", len(scratchpad), elapsed_ms, tools_used)
             self._record_error_metrics(kwargs, elapsed_ms, len(scratchpad), "MaxIterationsException", tracer)
             return AgentResponse.error_response(
                 agent_name=self.name,
@@ -233,7 +237,7 @@ class ReActAgent(BaseAgent):
 
         except LLMException as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(f"LLM error: {e}")
+            self._log_request_end(trace_id_short, "error:llm", len(scratchpad), elapsed_ms, tools_used)
             self._record_error_metrics(kwargs, elapsed_ms, len(scratchpad), "LLMException", tracer)
             return AgentResponse.error_response(
                 agent_name=self.name,
@@ -244,6 +248,7 @@ class ReActAgent(BaseAgent):
 
         except Exception as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._log_request_end(trace_id_short, "error:unexpected", len(scratchpad), elapsed_ms, tools_used)
             logger.exception(f"Unexpected error in ReAct: {e}")
             self._record_error_metrics(kwargs, elapsed_ms, len(scratchpad), type(e).__name__, tracer)
             return AgentResponse.error_response(
@@ -252,6 +257,21 @@ class ReActAgent(BaseAgent):
                 execution_time_ms=elapsed_ms,
                 steps_taken=len(scratchpad),
             )
+
+    def _log_request_end(
+        self,
+        trace_id_short: str,
+        status: str,
+        steps: int,
+        elapsed_ms: float,
+        tools_used: list[str],
+    ) -> None:
+        """Log del marcador REQUEST END."""
+        logger.info(
+            f"<<< REQUEST END [{trace_id_short}] "
+            f"status={status} steps={steps} "
+            f"time={elapsed_ms:.0f}ms tools={tools_used}"
+        )
 
     def _record_error_metrics(
         self,
@@ -298,7 +318,7 @@ class ReActAgent(BaseAgent):
         # Construir prompt de usuario
         if scratchpad.is_empty():
             prompt_context = context.to_prompt_context()
-            logger.debug(f"[DEBUG] User context for prompt:\n{prompt_context}")
+            logger.debug(f"User context for prompt:\n{prompt_context}")
             user_prompt = build_user_prompt(
                 query=query,
                 user_context=prompt_context,

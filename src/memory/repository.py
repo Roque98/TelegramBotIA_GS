@@ -256,11 +256,11 @@ class MemoryRepository:
                 ORDER BY lo.fechaEjecucion DESC
             """
 
-            logger.debug(f"[DEBUG] Fetching messages for telegram_chat_id={user_id}, limit={limit}")
+            logger.debug(f"Fetching messages for telegram_chat_id={user_id}, limit={limit}")
             results = self.db_manager.execute_query(
                 query, {"user_id": str(user_id), "limit": limit}
             )
-            logger.info(f"[DEBUG] Query returned {len(results)} rows for user {user_id}")
+            logger.debug(f"Query returned {len(results)} rows for user {user_id}")
 
             messages = []
             for row in reversed(results):  # Orden cronológico
@@ -289,9 +289,9 @@ class MemoryRepository:
                         "timestamp": row.get("Fecha_Hora", datetime.now(UTC)).isoformat(),
                     })
 
-            logger.info(f"[DEBUG] Built {len(messages)} messages for working_memory")
+            logger.debug(f"Built {len(messages)} messages for working_memory")
             if messages:
-                logger.debug(f"[DEBUG] First message: {messages[0]}")
+                logger.debug(f"First message: {messages[0]}")
             return messages
 
         except Exception as e:
