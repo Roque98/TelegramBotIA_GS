@@ -13,7 +13,8 @@ plan/
 ├── 01-completados/                        # Planes finalizados
 │   └── PLAN_REACT_MIGRATION.md            # Migracion a ReAct (100%)
 ├── 02-activos/                            # Planes en progreso
-│   └── (vacio - crear nuevos planes aqui)
+│   ├── PLAN_CONSOLIDAR_LEGACY.md          # Eliminar codigo legacy (19 tareas)
+│   └── PLAN_RETRY_RESILIENCE.md           # Retry con tenacity (14 tareas)
 └── 03-ideas/                              # Ideas y propuestas
     └── IDEAS_MEJORA_BOT.md                # 10 ideas de mejora priorizadas
 ```
@@ -25,7 +26,7 @@ plan/
 | Metrica | Valor |
 |---------|-------|
 | Planes completados | 1 |
-| Planes activos | 0 |
+| Planes activos | 2 |
 | Ideas documentadas | 10 |
 
 ---
@@ -40,7 +41,10 @@ plan/
 
 ## Planes Activos (02-activos/)
 
-_No hay planes activos. Para crear uno, ver seccion "Crear Nuevo Plan"._
+| Plan | Progreso | Rama | Tareas |
+|------|----------|------|--------|
+| [Consolidar Legacy](02-activos/PLAN_CONSOLIDAR_LEGACY.md) | 0% (0/19) | `feature/consolidar-legacy` | Eliminar ~6,000 ln legacy |
+| [Retry Resilience](02-activos/PLAN_RETRY_RESILIENCE.md) | 0% (0/14) | `feature/retry-resilience` | Tenacity en LLM + BD |
 
 ---
 
