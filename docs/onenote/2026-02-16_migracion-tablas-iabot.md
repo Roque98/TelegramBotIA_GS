@@ -199,11 +199,12 @@ Adicionalmente, se actualiza la estructura de las tablas de usuarios para reflej
 
 | Fase | Descripción | Estado | Progreso |
 |------|-------------|--------|----------|
-| 1 | Scripts SQL de migración | Pendiente | 0% |
-| 2 | Actualizar código (tablas renombradas con fully qualified names) | Pendiente | 0% |
-| 3 | Actualizar código (nueva estructura Usuarios) | Pendiente | 0% |
-| 4 | Documentación | Pendiente | 0% |
-| 5 | Testing | Pendiente | 0% |
+| 1 | Actualizar código (tablas renombradas con fully qualified names) | Pendiente | 0% |
+| 2 | Actualizar código (nueva estructura Usuarios) | Pendiente | 0% |
+| 3 | Documentación | Pendiente | 0% |
+| 4 | Testing | Pendiente | 0% |
+
+> **Nota**: Los scripts SQL de migración se realizan manualmente fuera de este plan.
 
 **Progreso total: 0%**
 

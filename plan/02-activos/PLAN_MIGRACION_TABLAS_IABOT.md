@@ -112,14 +112,7 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 
 ## Fases de Implementación
 
-### Fase 1: Scripts SQL de Migración
-- [ ] Crear script para crear tablas IABOT_* en consolamonitoreo con estructura idéntica
-- [ ] Crear script para migrar datos de ABCMASplus a consolamonitoreo
-- [ ] Crear script para recrear SPs en consolamonitoreo con referencias cross-database a ABCMASplus (Usuarios, Gerencias, GerenciasUsuarios)
-- [ ] Crear script para recrear vistas en consolamonitoreo
-- [ ] Crear script de rollback
-
-### Fase 2: Actualizar Código Python - Tablas Renombradas
+### Fase 1: Actualizar Código Python - Tablas Renombradas
 - [ ] `src/auth/registration.py` - Actualizar referencias: `consolamonitoreo.dbo.IABOT_UsuariosTelegram`
 - [ ] `src/auth/user_manager.py` - Actualizar referencias: IABOT_UsuariosTelegram, IABOT_Roles, IABOT_LogOperaciones (con prefijo `consolamonitoreo.dbo.`)
 - [ ] `src/auth/permission_checker.py` - Actualizar referencias: IABOT_Operaciones, IABOT_RolesOperaciones, SPs renombrados
@@ -129,14 +122,14 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 - [ ] `src/agents/tools/preference_tool.py` - Actualizar referencias: IABOT_UserMemoryProfiles, IABOT_UsuariosTelegram
 - [ ] `src/agents/tools/database_tool.py` - Actualizar queries genéricas
 
-### Fase 3: Actualizar Código Python - Nueva Estructura de Usuarios
+### Fase 2: Actualizar Código Python - Nueva Estructura de Usuarios
 - [ ] Actualizar modelos/schemas que referencian columnas de Usuarios (nueva estructura: Nombre, Password, idRol, email, puesto, UltimoAcceso, EstatusLDAP, TipoCuentaLDAP, Empresa, Activa)
 - [ ] Actualizar modelos/schemas de Gerencias (nueva estructura: idGerente, idResponsable, Gerencia, CentroCostos, idDireccion, GrupoDeCorreo, id_ChatTelegram, Nickname)
 - [ ] Actualizar modelos/schemas de GerenciasUsuarios (estructura simplificada: IdGerencia, IdUsuario)
 - [ ] Actualizar queries en `src/auth/user_manager.py` para usar nuevas columnas
 - [ ] Actualizar queries en `src/auth/registration.py` para usar nuevas columnas
 
-### Fase 4: Actualizar Documentación
+### Fase 3: Actualizar Documentación
 - [ ] Actualizar `.claude/context/DATABASE.md` con nueva estructura
 - [ ] Actualizar `docs/sql/00 ResumenEstructura.sql`
 - [ ] Actualizar `docs/sql/01 EstructuraUsuarios.sql`
@@ -145,7 +138,7 @@ FROM [ABCMASplus].[dbo].[GerenciasUsuarios]
 - [ ] Actualizar `docs/sql/04 StoredProcedures.sql`
 - [ ] Crear nueva migración en `database/migrations/`
 
-### Fase 5: Testing
+### Fase 4: Testing
 - [ ] Verificar que la conexión a ambas bases de datos funcione
 - [ ] Verificar autenticación y registro de usuarios
 - [ ] Verificar sistema de permisos
