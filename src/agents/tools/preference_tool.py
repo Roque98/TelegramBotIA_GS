@@ -165,12 +165,12 @@ class SavePreferenceTool(BaseTool):
                     WHERE ut.telegramChatId = :user_id
                       AND ut.activo = 1
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query_insert,
                     {"user_id": str(user_id), "preferences": json.dumps(preferences, ensure_ascii=False)}
                 )
             else:
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query_update,
                     {"user_id": str(user_id), "preferences": json.dumps(preferences, ensure_ascii=False)}
                 )

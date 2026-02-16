@@ -174,6 +174,52 @@ class DatabaseManager:
             logger.error(f"Error inesperado ejecutando consulta: {e}", exc_info=True)
             raise
 
+    def execute_non_query(self, sql_query: str, params: dict = None) -> int:
+        """
+        Ejecutar una consulta SQL de escritura (INSERT, UPDATE, DELETE, MERGE).
+
+        Args:
+            sql_query: Consulta SQL a ejecutar
+            params: Parámetros opcionales para la consulta
+
+        Returns:
+            Número de filas afectadas
+
+        Raises:
+            ValueError: Si la consulta es de solo lectura (SELECT)
+            ConnectionError: Si hay error de conexión a BD
+            TimeoutError: Si la consulta tarda demasiado
+            SQLAlchemyError: Si hay error de BD
+        """
+        query_upper = sql_query.strip().upper()
+        allowed_prefixes = ("INSERT", "UPDATE", "DELETE", "MERGE", "EXEC")
+        if not any(query_upper.startswith(p) for p in allowed_prefixes):
+            raise ValueError(f"Solo se permiten consultas de escritura: {', '.join(allowed_prefixes)}")
+
+        try:
+            with self.get_session() as session:
+                if params:
+                    result = session.execute(text(sql_query), params)
+                else:
+                    result = session.execute(text(sql_query))
+                return result.rowcount
+
+        except OperationalError as e:
+            logger.error(f"Error de conexión ejecutando escritura: {e}")
+            raise ConnectionError("Error de conexión a la base de datos") from e
+
+        except SQLTimeoutError as e:
+            logger.error(f"Timeout ejecutando escritura: {e}")
+            raise TimeoutError("La consulta tardó demasiado tiempo") from e
+
+        except SQLAlchemyError as e:
+            logger.error(f"Error SQL ejecutando escritura: {e}")
+            raise RuntimeError(f"Error ejecutando consulta SQL: {str(e)}") from e
+
+        except Exception as e:
+            logger.error(f"Error inesperado ejecutando escritura: {e}", exc_info=True)
+            raise
+
     def close(self):
         """Cerrar las conexiones de base de datos."""
         self.engine.dispose()
