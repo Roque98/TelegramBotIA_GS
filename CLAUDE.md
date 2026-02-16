@@ -76,9 +76,9 @@ Scopes del proyecto:
 
 ## Plan Activo
 
-El plan principal está en: `plan/PLAN_REACT_MIGRATION.md`
-- Archivo de referencia: `src/agent/llm_agent.py`
-- Progreso actual: Fase 2 - Tools (completada)
+El plan principal está en: `plan/01-completados/PLAN_REACT_MIGRATION.md` (completado)
+- Ideas de mejora: `plan/03-ideas/IDEAS_MEJORA_BOT.md`
+- Nuevos planes activos: `plan/02-activos/`
 
 ## Archivos de Contexto
 
