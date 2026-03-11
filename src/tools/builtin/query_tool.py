@@ -94,12 +94,20 @@ class QueryTool(BaseTool):
 
         user_query = params['query']
 
+        # Construir contexto del usuario para que el LLM use valores literales
+        # en lugar de variables T-SQL no declaradas (@telegramChatId, etc.)
+        user_context = {
+            'telegram_chat_id': context.get_chat_id(),
+            'telegram_username': context.get_username(),
+            'id_usuario': user_id
+        }
+
         try:
             logger.info(f"Procesando query de usuario {user_id}: {user_query[:50]}...")
 
             # Usar LLMAgent completo - toda la magia sucede aquí
             # El LLMAgent orquesta automáticamente todos los componentes
-            response = await context.llm_agent.process_query(user_query)
+            response = await context.llm_agent.process_query(user_query, user_context)
 
             logger.info(f"Query procesada exitosamente para usuario {user_id}")
 

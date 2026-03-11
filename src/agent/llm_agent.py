@@ -102,7 +102,11 @@ class LLMAgent:
             return "***"
         return f"{token[:4]}...{token[-4:]}"
 
-    async def process_query(self, user_query: str) -> str:
+    async def process_query(
+        self,
+        user_query: str,
+        user_context: Optional[dict] = None
+    ) -> str:
         """
         Procesar una consulta del usuario.
 
@@ -114,6 +118,7 @@ class LLMAgent:
 
         Args:
             user_query: Consulta en lenguaje natural del usuario
+            user_context: Contexto del usuario (telegram_chat_id, id_usuario, etc.)
 
         Returns:
             Respuesta formateada para el usuario
@@ -131,7 +136,7 @@ class LLMAgent:
                 return await self._process_knowledge_query(user_query)
 
             # 4. Si requiere base de datos, seguir el flujo completo
-            return await self._process_database_query(user_query)
+            return await self._process_database_query(user_query, user_context)
 
         except Exception as e:
             logger.error(f"Error en process_query: {e}", exc_info=True)
@@ -212,12 +217,17 @@ class LLMAgent:
                 user_friendly=True
             )
 
-    async def _process_database_query(self, user_query: str) -> str:
+    async def _process_database_query(
+        self,
+        user_query: str,
+        user_context: Optional[dict] = None
+    ) -> str:
         """
         Procesar una consulta que requiere acceso a base de datos.
 
         Args:
             user_query: Consulta del usuario
+            user_context: Contexto del usuario (telegram_chat_id, id_usuario, etc.)
 
         Returns:
             Respuesta formateada con resultados
@@ -227,8 +237,8 @@ class LLMAgent:
         # 1. Obtener esquema de la base de datos
         schema = await asyncio.to_thread(self.db_manager.get_schema)
 
-        # 2. Generar SQL
-        sql_query = await self.sql_generator.generate_sql(user_query, schema)
+        # 2. Generar SQL (pasando contexto del usuario para evitar @variables no declaradas)
+        sql_query = await self.sql_generator.generate_sql(user_query, schema, user_context)
 
         if not sql_query:
             return "No pude generar una consulta SQL válida para tu pregunta."

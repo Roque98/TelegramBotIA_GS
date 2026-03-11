@@ -110,6 +110,13 @@ SQL:""")
 Esquema de la base de datos:
 {{ database_schema }}
 
+{% if user_context %}
+Contexto del usuario que realiza la consulta (usa estos valores literales cuando sea necesario):
+{% if user_context.telegram_chat_id %}- telegramChatId del usuario actual: {{ user_context.telegram_chat_id }}{% endif %}
+{% if user_context.telegram_username %}- username de Telegram: {{ user_context.telegram_username }}{% endif %}
+{% if user_context.id_usuario %}- idUsuario en el sistema: {{ user_context.id_usuario }}{% endif %}
+{% endif %}
+
 Pregunta del usuario: "{{ user_query }}"
 
 Genera una consulta SQL que:
@@ -120,6 +127,7 @@ Genera una consulta SQL que:
 ✓ Use TOP {{ max_results|default(100) }} para limitar resultados
 ✓ Sea eficiente y optimizada
 ✓ Maneje valores NULL apropiadamente
+✓ NUNCA uses variables T-SQL no declaradas (@variable). Si necesitas filtrar por el usuario actual, usa el valor literal del contexto proporcionado arriba.
 
 Formato de salida: SQL puro sin markdown, comentarios ni explicaciones.
 
