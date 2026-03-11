@@ -103,7 +103,7 @@ class PermissionChecker:
         """
         try:
             query = text("""
-                EXEC abcmasplus..sp_VerificarPermisoOperacion
+                EXEC consolaMonitoreo..BotIA_sp_VerificarPermisoOperacion
                     @idUsuario = :user_id,
                     @comando = :comando
             """)
@@ -145,7 +145,7 @@ class PermissionChecker:
         """
         try:
             query = text("""
-                EXEC sp_ObtenerOperacionesUsuario
+                EXEC consolaMonitoreo..BotIA_sp_ObtenerOperacionesUsuario
                     @idUsuario = :user_id
             """)
 
@@ -228,7 +228,7 @@ class PermissionChecker:
                 parametros_json = json.dumps(parametros, ensure_ascii=False)
 
             query = text("""
-                EXEC abcmasplus..sp_RegistrarLogOperacion
+                EXEC consolaMonitoreo..BotIA_sp_RegistrarLogOperacion
                     @idUsuario = :user_id,
                     @comando = :comando,
                     @telegramChatId = :telegram_chat_id,
