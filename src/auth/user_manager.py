@@ -29,13 +29,11 @@ class TelegramUser:
         """
         # Datos del usuario
         self.id_usuario = data.get('idUsuario')
-        self.id_empleado = data.get('idEmpleado')
-        self.nombre = data.get('nombre')
-        self.apellido = data.get('apellido')
+        self.nombre = data.get('Nombre')
         self.email = data.get('email')
-        self.rol_id = data.get('rol')
+        self.rol_id = data.get('idRol')
         self.rol_nombre = data.get('rolNombre')
-        self.activo = data.get('activo', True)
+        self.activo = data.get('Activa', True)
 
         # Datos de la cuenta de Telegram
         self.id_usuario_telegram = data.get('idUsuarioTelegram')
@@ -52,7 +50,7 @@ class TelegramUser:
     @property
     def nombre_completo(self) -> str:
         """Obtener nombre completo del usuario."""
-        return f"{self.nombre} {self.apellido}"
+        return self.nombre or ''
 
     @property
     def is_active(self) -> bool:
@@ -99,13 +97,11 @@ class UserManager:
             query = text("""
                 SELECT
                     u.idUsuario,
-                    u.idEmpleado,
-                    u.nombre,
-                    u.apellido,
+                    u.Nombre,
                     u.email,
-                    u.rol,
-                    r.nombre AS rolNombre,
-                    u.activo,
+                    u.idRol,
+                    r.rol AS rolNombre,
+                    u.Activa,
                     ut.idUsuarioTelegram,
                     ut.telegramChatId,
                     ut.telegramUsername,
@@ -116,9 +112,9 @@ class UserManager:
                     ut.estado,
                     ut.verificado,
                     ut.fechaUltimaActividad
-                FROM abcmasplus..UsuariosTelegram ut
-                INNER JOIN  abcmasplus..Usuarios u ON ut.idUsuario = u.idUsuario
-                INNER JOIN  abcmasplus..Roles r ON u.rol = r.idRol
+                FROM consolaMonitoreo..BotIA_UsuariosTelegram ut
+                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios u ON ut.idUsuario = u.idUsuario
+                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
                 WHERE ut.telegramChatId = :chat_id
                     AND ut.activo = 1
             """)
@@ -151,13 +147,11 @@ class UserManager:
             query = text("""
                 SELECT
                     u.idUsuario,
-                    u.idEmpleado,
-                    u.nombre,
-                    u.apellido,
+                    u.Nombre,
                     u.email,
-                    u.rol,
-                    r.nombre AS rolNombre,
-                    u.activo,
+                    u.idRol,
+                    r.rol AS rolNombre,
+                    u.Activa,
                     ut.idUsuarioTelegram,
                     ut.telegramChatId,
                     ut.telegramUsername,
@@ -168,9 +162,9 @@ class UserManager:
                     ut.estado,
                     ut.verificado,
                     ut.fechaUltimaActividad
-                FROM  abcmasplus..Usuarios u
-                INNER JOIN  abcmasplus..Roles r ON u.rol = r.idRol
-                LEFT JOIN  abcmasplus..UsuariosTelegram ut ON u.idUsuario = ut.idUsuario
+                FROM  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios u
+                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
+                LEFT JOIN  consolaMonitoreo..BotIA_UsuariosTelegram ut ON u.idUsuario = ut.idUsuario
                     AND ut.esPrincipal = 1
                     AND ut.activo = 1
                 WHERE u.idUsuario = :user_id
@@ -214,7 +208,7 @@ class UserManager:
         """
         try:
             query = text("""
-                UPDATE  abcmasplus..UsuariosTelegram
+                UPDATE  consolaMonitoreo..BotIA_UsuariosTelegram
                 SET fechaUltimaActividad = GETDATE()
                 WHERE telegramChatId = :chat_id
                     AND activo = 1
@@ -249,7 +243,7 @@ class UserManager:
                     SUM(CASE WHEN resultado = 'DENEGADO' THEN 1 ELSE 0 END) AS denegadas,
                     AVG(CAST(duracionMs AS FLOAT)) AS duracionPromedio,
                     MAX(fechaEjecucion) AS ultimaOperacion
-                FROM  abcmasplus..LogOperaciones
+                FROM  consolaMonitoreo..BotIA_LogOperaciones
                 WHERE idUsuario = :user_id
             """)
 
@@ -287,7 +281,7 @@ class UserManager:
                     verificado,
                     fechaRegistro,
                     fechaUltimaActividad
-                FROM  abcmasplus..UsuariosTelegram
+                FROM  consolaMonitoreo..BotIA_UsuariosTelegram
                 WHERE idUsuario = :user_id
                     AND activo = 1
                 ORDER BY esPrincipal DESC, fechaRegistro DESC
