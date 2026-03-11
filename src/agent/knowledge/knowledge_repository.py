@@ -55,8 +55,8 @@ class KnowledgeRepository:
             e.related_commands,
             e.priority,
             c.name as category_name
-        FROM abcmasplus.dbo.knowledge_entries e
-        INNER JOIN abcmasplus.dbo.knowledge_categories c ON e.category_id = c.id
+        FROM consolaMonitoreo.dbo.BotIA_knowledge_entries e
+        INNER JOIN consolaMonitoreo.dbo.BotIA_knowledge_categories c ON e.category_id = c.id
         WHERE e.active = 1 AND c.active = 1
         ORDER BY e.priority DESC, e.id
         """
@@ -100,8 +100,8 @@ class KnowledgeRepository:
             e.related_commands,
             e.priority,
             c.name as category_name
-        FROM abcmasplus.dbo.knowledge_entries e
-        INNER JOIN abcmasplus.dbo.knowledge_categories c ON e.category_id = c.id
+        FROM consolaMonitoreo.dbo.BotIA_knowledge_entries e
+        INNER JOIN consolaMonitoreo.dbo.BotIA_knowledge_categories c ON e.category_id = c.id
         WHERE e.active = 1
             AND c.active = 1
             AND c.name = ?
@@ -140,7 +140,7 @@ class KnowledgeRepository:
         Returns:
             Lista de resultados con scores
         """
-        sql = "EXEC abcmasplus.dbo.sp_search_knowledge @query=?, @category=?, @top_k=?"
+        sql = "EXEC consolaMonitoreo.dbo.BotIA_sp_search_knowledge @query=?, @category=?, @top_k=?"
 
         try:
             results = self.db_manager.execute_query(
@@ -218,7 +218,7 @@ class KnowledgeRepository:
 
         query = """
         SELECT id, name, display_name, icon
-        FROM abcmasplus.dbo.knowledge_categories
+        FROM consolaMonitoreo.dbo.BotIA_knowledge_categories
         WHERE active = 1
         """
 
@@ -248,7 +248,7 @@ class KnowledgeRepository:
             True si la BD responde correctamente
         """
         try:
-            query = "SELECT COUNT(*) as total FROM abcmasplus.dbo.knowledge_entries WHERE active = 1"
+            query = "SELECT COUNT(*) as total FROM consolaMonitoreo.dbo.BotIA_knowledge_entries WHERE active = 1"
             result = self.db_manager.execute_query(query)
 
             if result and len(result) > 0:
