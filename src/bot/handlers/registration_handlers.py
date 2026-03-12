@@ -61,8 +61,7 @@ class RegistrationHandlers:
                     await update.message.reply_text(
                         f"✅ Hola {telegram_user.nombre_completo},\n\n"
                         f"Ya estás registrado y verificado en el sistema.\n\n"
-                        f"👤 *Rol:* {telegram_user.rol_nombre}\n"
-                        f"🆔 *ID Empleado:* {telegram_user.id_empleado}\n\n"
+                        f"👤 *Rol:* {telegram_user.rol_nombre}\n\n"
                         f"Puedes usar /help para ver los comandos disponibles.",
                         parse_mode='Markdown'
                     )
@@ -214,7 +213,6 @@ class RegistrationHandlers:
                         f"🎉 *¡Verificación exitosa!*\n\n"
                         f"Bienvenido, *{telegram_user.nombre_completo}*\n\n"
                         f"👤 *Rol:* {telegram_user.rol_nombre}\n"
-                        f"🆔 *ID Empleado:* {telegram_user.id_empleado}\n"
                         f"📧 *Email:* {telegram_user.email}\n\n"
                         f"✅ Tu cuenta está activa.\n"
                         f"Usa /help para ver los comandos disponibles.",

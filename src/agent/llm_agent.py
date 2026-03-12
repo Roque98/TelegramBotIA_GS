@@ -124,23 +124,41 @@ class LLMAgent:
             Respuesta formateada para el usuario
         """
         try:
-            # 1. Clasificar la consulta
-            query_type = await self.query_classifier.classify(user_query)
+            # Modo IA puro: responder directamente con LLM sin clasificación ni BD
+            return await self._process_ai_query(user_query)
 
-            # 2. Si es una consulta general, responder directamente
-            if query_type == QueryType.GENERAL:
-                return await self._process_general_query(user_query)
-
-            # 3. Si es conocimiento institucional, responder con knowledge base
-            if query_type == QueryType.KNOWLEDGE:
-                return await self._process_knowledge_query(user_query)
-
-            # 4. Si requiere base de datos, seguir el flujo completo
-            return await self._process_database_query(user_query, user_context)
+            # TODO: Reactivar clasificación y consultas a BD cuando se requiera
+            # query_type = await self.query_classifier.classify(user_query)
+            # if query_type == QueryType.GENERAL:
+            #     return await self._process_general_query(user_query)
+            # if query_type == QueryType.KNOWLEDGE:
+            #     return await self._process_knowledge_query(user_query)
+            # return await self._process_database_query(user_query, user_context)
 
         except Exception as e:
             logger.error(f"Error en process_query: {e}", exc_info=True)
             return self.response_formatter.format_error(str(e), user_friendly=True)
+
+    async def _process_ai_query(self, user_query: str) -> str:
+        """
+        Responder directamente con LLM sin clasificación ni consultas a BD.
+        Modo temporal mientras se configura el flujo completo.
+        """
+        prompt = self.prompt_manager.get_prompt(
+            'general_response',
+            version=2,
+            user_query=user_query,
+            context=None
+        )
+        try:
+            response = await self.llm_provider.generate(prompt, max_tokens=1024)
+            return self.response_formatter.format_general_response(response)
+        except Exception as e:
+            logger.error(f"Error en _process_ai_query: {e}")
+            return self.response_formatter.format_error(
+                "No pude procesar tu pregunta en este momento.",
+                user_friendly=True
+            )
 
     async def _process_general_query(self, user_query: str) -> str:
         """
