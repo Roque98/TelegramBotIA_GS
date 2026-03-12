@@ -23,7 +23,9 @@ class AlertRepository:
         solo_down: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Obtiene eventos activos ejecutando PrtgObtenerEventosEnriquecidos.
+        Obtiene eventos activos combinando ambos SPs de monitoreo:
+          - PrtgObtenerEventosEnriquecidos
+          - PrtgObtenerEventosEnriquecidosPerformance
 
         Args:
             ip: Filtra por IP exacta del equipo.
@@ -31,10 +33,19 @@ class AlertRepository:
             solo_down: Si True, retorna solo eventos con Status='Down'.
 
         Returns:
-            Lista de eventos como diccionarios.
+            Lista combinada de eventos como diccionarios.
         """
         db = DatabaseManager.get(_DB_ALIAS)
-        rows = db.execute_query("EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidos")
+
+        rows = []
+        for sp in (
+            "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidos",
+            "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidosPerformance",
+        ):
+            try:
+                rows += db.execute_query(sp)
+            except Exception as e:
+                logger.warning(f"No se pudo ejecutar {sp}: {e}")
 
         if ip:
             rows = [r for r in rows if r.get("IP") == ip]
