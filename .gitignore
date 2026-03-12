@@ -30,6 +30,9 @@ ENV/
 .env
 .env.local
 
+# Conexiones a bases de datos (credenciales)
+src/config/db_connections.json
+
 # IDE
 .vscode/
 .idea/

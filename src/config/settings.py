@@ -1,6 +1,7 @@
 """
 Configuración centralizada de la aplicación usando Pydantic Settings.
 """
+import json
 from pathlib import Path
 from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,6 +10,7 @@ from dotenv import load_dotenv
 # Obtener la ruta del directorio raíz del proyecto
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
+DB_CONNECTIONS_FILE = Path(__file__).parent / "db_connections.json"
 
 # Forzar carga del archivo .env con prioridad sobre variables de entorno del sistema
 load_dotenv(ENV_FILE, override=True)
@@ -43,6 +45,40 @@ class Settings(BaseSettings):
     # Application
     log_level: str = "INFO"
     environment: str = "development"
+
+    def get_alias_config(self, alias: str) -> dict:
+        """
+        Carga db_connections.json y retorna la config del alias pedido.
+        Retorna dict con keys: host, port, user, password.
+        Lanza ValueError si el alias no existe, FileNotFoundError si falta el archivo.
+        """
+        if not DB_CONNECTIONS_FILE.exists():
+            raise FileNotFoundError(
+                f"Archivo de conexiones no encontrado: {DB_CONNECTIONS_FILE}. "
+                f"Crea src/config/db_connections.json con los aliases de BD."
+            )
+
+        with open(DB_CONNECTIONS_FILE, encoding="utf-8") as f:
+            connections = json.load(f)
+
+        if alias not in connections:
+            available = list(connections.keys())
+            raise ValueError(
+                f"Alias '{alias}' no existe en db_connections.json. "
+                f"Aliases disponibles: {available}"
+            )
+
+        cfg = connections[alias]
+        parts = cfg["Host"].split(",")
+        host = parts[0].strip()
+        port = int(parts[1].strip()) if len(parts) > 1 else 1433
+
+        return {
+            "host": host,
+            "port": port,
+            "user": cfg["User"],
+            "password": cfg["Pass"],
+        }
 
     @property
     def database_url(self) -> str:
