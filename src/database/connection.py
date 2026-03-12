@@ -104,18 +104,19 @@ class DatabaseManager:
             logger.error(f"Error obteniendo esquema: {e}")
             raise
 
-    def execute_query(self, sql_query: str) -> List[Dict[str, Any]]:
+    def execute_query(self, sql_query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        Ejecutar una consulta SQL de solo lectura.
+        Ejecutar una consulta SQL de solo lectura o EXEC de stored procedure.
 
         Args:
-            sql_query: Consulta SQL a ejecutar
+            sql_query: Consulta SQL o EXEC a ejecutar
+            params: Parámetros nombrados para la consulta (ej: {"ip": "10.0.0.1"})
 
         Returns:
             Lista de diccionarios con los resultados
 
         Raises:
-            ValueError: Si la consulta no es de solo lectura
+            ValueError: Si la consulta no es SELECT ni EXEC
         """
         # Validar que sea operación de lectura (SELECT o EXEC de SP)
         query_upper = sql_query.strip().upper()
@@ -124,7 +125,7 @@ class DatabaseManager:
 
         try:
             with self.get_session() as session:
-                result = session.execute(text(sql_query))
+                result = session.execute(text(sql_query), params or {})
                 rows = result.fetchall()
 
                 # Convertir a lista de diccionarios
