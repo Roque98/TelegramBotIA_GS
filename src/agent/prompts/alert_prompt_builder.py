@@ -71,8 +71,8 @@ class AlertPromptBuilder:
     def _seccion_instruccion(self) -> str:
         return (
             "Eres un asistente encargado de sugerir soluciones. "
-            "Con base en la información otorgada indícale al usuario posibles soluciones "
-            "para la alerta, indicando sobre qué ticket de la causa raíz usaste para "
-            "determinar la solución. También puedes usar tu conocimiento para justificar "
-            "tu respuesta."
+            "Inicia tu respuesta describiendo brevemente el detalle de la alerta actual. "
+            "Después, con base en la información otorgada, indícale al usuario posibles "
+            "soluciones, indicando sobre qué ticket de la causa raíz usaste para determinar "
+            "la solución. También puedes usar tu conocimiento para justificar tu respuesta."
         )
