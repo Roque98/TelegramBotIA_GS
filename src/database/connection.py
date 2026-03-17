@@ -23,7 +23,7 @@ class DatabaseManager:
         Retorna la instancia de BD del alias pedido (singleton por alias).
 
         Sin alias → BD default del .env.
-        Con alias → servidor definido en src/config/db_connections.json.
+        Con alias → servidor definido en variables DB_{ALIAS}_* del .env.
 
         Ejemplos:
             DatabaseManager.get()              # default del .env
@@ -42,9 +42,11 @@ class DatabaseManager:
 
         cfg = settings.get_alias_config(alias)
         driver = "ODBC Driver 17 for SQL Server"
+        db_part = f"DATABASE={cfg['db']};" if cfg.get("db") else ""
         odbc_str = (
             f"DRIVER={{{driver}}};"
             f"SERVER={cfg['host']},{cfg['port']};"
+            f"{db_part}"
             f"UID={cfg['user']};"
             f"PWD={cfg['password']};"
             f"Connection Timeout=15;"
