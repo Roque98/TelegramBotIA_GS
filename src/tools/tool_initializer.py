@@ -6,6 +6,7 @@ Registra todos los tools built-in en el ToolRegistry al iniciar el bot.
 import logging
 from .tool_registry import get_registry
 from .builtin.query_tool import QueryTool
+from .builtin.alert_analysis_tool import AlertAnalysisTool
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +23,7 @@ def initialize_builtin_tools() -> None:
     # Lista de tools built-in a registrar
     builtin_tools = [
         QueryTool(),
-        # Aquí se agregarán más tools en el futuro:
-        # HelpTool(),
-        # StatsTool(),
-        # RegistrationTool(),
-        # etc.
+        AlertAnalysisTool(),
     ]
 
     # Registrar cada tool

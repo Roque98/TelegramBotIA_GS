@@ -3,6 +3,7 @@ Gestión de conexiones a la base de datos.
 """
 import logging
 from typing import List, Dict, Any
+from urllib.parse import quote_plus
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -14,9 +15,47 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """Gestor de conexiones y operaciones de base de datos."""
 
-    def __init__(self):
+    _instances: dict = {}  # alias → instancia (singleton por alias)
+
+    @classmethod
+    def get(cls, alias: str = "default") -> "DatabaseManager":
+        """
+        Retorna la instancia de BD del alias pedido (singleton por alias).
+
+        Sin alias → BD default del .env.
+        Con alias → servidor definido en variables DB_{ALIAS}_* del .env.
+
+        Ejemplos:
+            DatabaseManager.get()              # default del .env
+            DatabaseManager.get("BAZ_CDMX")   # servidor del JSON
+        """
+        if alias not in cls._instances:
+            url = cls._build_url(alias)
+            cls._instances[alias] = cls(url)
+        return cls._instances[alias]
+
+    @staticmethod
+    def _build_url(alias: str) -> str:
+        """Construye la URL de conexión para el alias dado."""
+        if alias == "default":
+            return settings.database_url
+
+        cfg = settings.get_alias_config(alias)
+        driver = "ODBC Driver 17 for SQL Server"
+        db_part = f"DATABASE={cfg['db']};" if cfg.get("db") else ""
+        odbc_str = (
+            f"DRIVER={{{driver}}};"
+            f"SERVER={cfg['host']},{cfg['port']};"
+            f"{db_part}"
+            f"UID={cfg['user']};"
+            f"PWD={cfg['password']};"
+            f"Connection Timeout=15;"
+        )
+        return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_str)}"
+
+    def __init__(self, database_url: str = None):
         """Inicializar el gestor de base de datos."""
-        self.database_url = settings.database_url
+        self.database_url = database_url or settings.database_url
 
         # Para operaciones síncronas con configuración optimizada
         self.engine = create_engine(
@@ -33,7 +72,7 @@ class DatabaseManager:
         )
         self.SessionLocal = sessionmaker(bind=self.engine)
 
-        logger.info(f"Conectado a base de datos: {settings.db_type} en {settings.db_host}")
+        logger.info(f"DatabaseManager inicializado: {self.database_url[:40]}...")
 
     def get_session(self) -> Session:
         """Obtener una sesión de base de datos."""
@@ -67,27 +106,28 @@ class DatabaseManager:
             logger.error(f"Error obteniendo esquema: {e}")
             raise
 
-    def execute_query(self, sql_query: str) -> List[Dict[str, Any]]:
+    def execute_query(self, sql_query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        Ejecutar una consulta SQL de solo lectura.
+        Ejecutar una consulta SQL de solo lectura o EXEC de stored procedure.
 
         Args:
-            sql_query: Consulta SQL a ejecutar
+            sql_query: Consulta SQL o EXEC a ejecutar
+            params: Parámetros nombrados para la consulta (ej: {"ip": "10.0.0.1"})
 
         Returns:
             Lista de diccionarios con los resultados
 
         Raises:
-            ValueError: Si la consulta no es de solo lectura
+            ValueError: Si la consulta no es SELECT ni EXEC
         """
-        # Validar que sea solo SELECT
+        # Validar que sea operación de lectura (SELECT o EXEC de SP)
         query_upper = sql_query.strip().upper()
-        if not query_upper.startswith("SELECT"):
-            raise ValueError("Solo se permiten consultas SELECT")
+        if not (query_upper.startswith("SELECT") or query_upper.startswith("EXEC")):
+            raise ValueError("Solo se permiten consultas SELECT o EXEC de stored procedures")
 
         try:
             with self.get_session() as session:
-                result = session.execute(text(sql_query))
+                result = session.execute(text(sql_query), params or {})
                 rows = result.fetchall()
 
                 # Convertir a lista de diccionarios

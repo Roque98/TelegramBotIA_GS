@@ -102,7 +102,11 @@ class LLMAgent:
             return "***"
         return f"{token[:4]}...{token[-4:]}"
 
-    async def process_query(self, user_query: str) -> str:
+    async def process_query(
+        self,
+        user_query: str,
+        user_context: Optional[dict] = None
+    ) -> str:
         """
         Procesar una consulta del usuario.
 
@@ -114,28 +118,47 @@ class LLMAgent:
 
         Args:
             user_query: Consulta en lenguaje natural del usuario
+            user_context: Contexto del usuario (telegram_chat_id, id_usuario, etc.)
 
         Returns:
             Respuesta formateada para el usuario
         """
         try:
-            # 1. Clasificar la consulta
-            query_type = await self.query_classifier.classify(user_query)
+            # Modo IA puro: responder directamente con LLM sin clasificación ni BD
+            return await self._process_ai_query(user_query)
 
-            # 2. Si es una consulta general, responder directamente
-            if query_type == QueryType.GENERAL:
-                return await self._process_general_query(user_query)
-
-            # 3. Si es conocimiento institucional, responder con knowledge base
-            if query_type == QueryType.KNOWLEDGE:
-                return await self._process_knowledge_query(user_query)
-
-            # 4. Si requiere base de datos, seguir el flujo completo
-            return await self._process_database_query(user_query)
+            # TODO: Reactivar clasificación y consultas a BD cuando se requiera
+            # query_type = await self.query_classifier.classify(user_query)
+            # if query_type == QueryType.GENERAL:
+            #     return await self._process_general_query(user_query)
+            # if query_type == QueryType.KNOWLEDGE:
+            #     return await self._process_knowledge_query(user_query)
+            # return await self._process_database_query(user_query, user_context)
 
         except Exception as e:
             logger.error(f"Error en process_query: {e}", exc_info=True)
             return self.response_formatter.format_error(str(e), user_friendly=True)
+
+    async def _process_ai_query(self, user_query: str) -> str:
+        """
+        Responder directamente con LLM sin clasificación ni consultas a BD.
+        Modo temporal mientras se configura el flujo completo.
+        """
+        prompt = self.prompt_manager.get_prompt(
+            'general_response',
+            version=2,
+            user_query=user_query,
+            context=None
+        )
+        try:
+            response = await self.llm_provider.generate(prompt, max_tokens=1024)
+            return self.response_formatter.format_general_response(response)
+        except Exception as e:
+            logger.error(f"Error en _process_ai_query: {e}")
+            return self.response_formatter.format_error(
+                "No pude procesar tu pregunta en este momento.",
+                user_friendly=True
+            )
 
     async def _process_general_query(self, user_query: str) -> str:
         """
@@ -153,24 +176,18 @@ class LLMAgent:
         logger.info("Consulta general detectada - recordando propósito del bot")
 
         return (
-            "👋 ¡Hola! Soy un asistente especializado en información empresarial y consultas de base de datos.\n\n"
+            "👋 Soy un asistente especializado en el análisis de alertas de monitoreo PRTG del banco.\n\n"
             "🎯 **Puedo ayudarte con:**\n\n"
-            "📋 **Información Institucional:**\n"
-            "• Políticas de la empresa\n"
-            "• Procesos y procedimientos\n"
-            "• Preguntas frecuentes (FAQs)\n"
-            "• Contactos de departamentos\n"
-            "• Información de sistemas\n\n"
-            "📊 **Consultas de Base de Datos:**\n"
-            "• Análisis de ventas\n"
-            "• Reportes de productos\n"
-            "• Estadísticas y métricas\n"
-            "• Información de clientes\n\n"
+            "🚨 **Análisis de alertas activas:**\n"
+            "• Diagnóstico de dispositivos en estado Down o Warning\n"
+            "• Consultas por IP o nombre de dispositivo\n"
+            "• Historial de tickets similares\n"
+            "• Resumen general del estado del monitoreo\n\n"
             "💡 **Ejemplos de preguntas:**\n"
-            "• `/ia ¿Cómo solicito vacaciones?`\n"
-            "• `/ia ¿Qué tablas están disponibles?`\n"
-            "• `/ia ¿Cuántas ventas hay del producto X?`\n"
-            "• `/ia ¿Cuál es el horario de trabajo?`\n\n"
+            "• Analiza las alertas actuales\n"
+            "• ¿Qué pasa con 10.80.191.22?\n"
+            "• ¿Hay algo caído en producción?\n"
+            "• Dame un diagnóstico de los eventos Down\n\n"
             "✨ **¿En qué puedo ayudarte hoy?**"
         )
 
@@ -212,12 +229,17 @@ class LLMAgent:
                 user_friendly=True
             )
 
-    async def _process_database_query(self, user_query: str) -> str:
+    async def _process_database_query(
+        self,
+        user_query: str,
+        user_context: Optional[dict] = None
+    ) -> str:
         """
         Procesar una consulta que requiere acceso a base de datos.
 
         Args:
             user_query: Consulta del usuario
+            user_context: Contexto del usuario (telegram_chat_id, id_usuario, etc.)
 
         Returns:
             Respuesta formateada con resultados
@@ -227,8 +249,8 @@ class LLMAgent:
         # 1. Obtener esquema de la base de datos
         schema = await asyncio.to_thread(self.db_manager.get_schema)
 
-        # 2. Generar SQL
-        sql_query = await self.sql_generator.generate_sql(user_query, schema)
+        # 2. Generar SQL (pasando contexto del usuario para evitar @variables no declaradas)
+        sql_query = await self.sql_generator.generate_sql(user_query, schema, user_context)
 
         if not sql_query:
             return "No pude generar una consulta SQL válida para tu pregunta."

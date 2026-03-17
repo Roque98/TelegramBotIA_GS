@@ -1,6 +1,7 @@
 """
 Configuración centralizada de la aplicación usando Pydantic Settings.
 """
+import os
 from pathlib import Path
 from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,7 +21,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
     # Telegram
@@ -44,6 +46,35 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     environment: str = "development"
 
+    def get_alias_config(self, alias: str) -> dict:
+        """
+        Lee la configuración de un alias de BD desde variables de entorno.
+        Convención: DB_{ALIAS}_HOST, DB_{ALIAS}_PORT, DB_{ALIAS}_USER, DB_{ALIAS}_PASS
+        Opcional:   DB_{ALIAS}_DB  (nombre de base de datos inicial)
+
+        Retorna dict con keys: host, port, user, password, db.
+        Lanza ValueError si las variables requeridas no están definidas.
+        """
+        prefix = f"DB_{alias.upper().replace('-', '_')}_"
+
+        host = os.environ.get(f"{prefix}HOST")
+        user = os.environ.get(f"{prefix}USER")
+        password = os.environ.get(f"{prefix}PASS")
+
+        if not host or not user or not password:
+            raise ValueError(
+                f"Alias '{alias}' no configurado. "
+                f"Define {prefix}HOST, {prefix}USER y {prefix}PASS en .env"
+            )
+
+        return {
+            "host": host,
+            "port": int(os.environ.get(f"{prefix}PORT", "1433")),
+            "user": user,
+            "password": password,
+            "db": os.environ.get(f"{prefix}DB", ""),
+        }
+
     @property
     def database_url(self) -> str:
         """Construir URL de conexión a la base de datos."""
@@ -60,9 +91,13 @@ class Settings(BaseSettings):
             # Si se especifica una instancia nombrada (ej: SQLEXPRESS), usar odbc_connect
             if self.db_instance:
                 # Construir connection string ODBC directa para instancia nombrada
+                # Si hay puerto personalizado, incluirlo para evitar depender de SQL Server Browser
+                server = f"{self.db_host}\\{self.db_instance}"
+                if self.db_port and self.db_port != 1433:
+                    server = f"{self.db_host},{self.db_port}\\{self.db_instance}"
                 odbc_str = (
                     f"DRIVER={{{driver}}};"
-                    f"SERVER={self.db_host}\\{self.db_instance};"
+                    f"SERVER={server};"
                     f"DATABASE={self.db_name};"
                     f"UID={self.db_user};"
                     f"PWD={self.db_password};"

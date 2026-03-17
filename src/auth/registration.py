@@ -15,8 +15,11 @@ from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from src.database.connection import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+_ABCMASPLUS = "BAZ_CDMX"
 
 
 class RegistrationError(Exception):
@@ -63,27 +66,13 @@ class RegistrationManager:
             Datos del usuario si existe, None en caso contrario
         """
         try:
-            query = text("""
-                SELECT
-                    idUsuario,
-                    Nombre AS nombre,
-                    NULL AS apellido,
-                    email,
-                    idRol AS rol,
-                    puesto,
-                    Activa AS activo
-                FROM  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios
-                WHERE email = :email
-                    AND Activa = 1
-            """)
-
-            result = self.session.execute(query, {"email": email})
-            row = result.fetchone()
-
-            if row:
-                return dict(zip(result.keys(), row))
-
-            return None
+            rows = DatabaseManager.get(_ABCMASPLUS).execute_query("""
+                SELECT idUsuario, Nombre AS nombre, NULL AS apellido,
+                       email, idRol AS rol, puesto, Activa AS activo
+                FROM ABCMASplus.dbo.Usuarios
+                WHERE email = :email AND Activa = 1
+            """, {"email": email})
+            return rows[0] if rows else None
 
         except Exception as e:
             logger.error(f"Error buscando usuario por email {email}: {e}")
@@ -100,27 +89,13 @@ class RegistrationManager:
             Datos del usuario si existe, None en caso contrario
         """
         try:
-            query = text("""
-                SELECT
-                    idUsuario,
-                    Nombre AS nombre,
-                    NULL AS apellido,
-                    email,
-                    idRol AS rol,
-                    puesto,
-                    Activa AS activo
-                FROM OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios
-                WHERE idUsuario = :employee_id
-                    AND Activa = 1
-            """)
-
-            result = self.session.execute(query, {"employee_id": employee_id})
-            row = result.fetchone()
-
-            if row:
-                return dict(zip(result.keys(), row))
-
-            return None
+            rows = DatabaseManager.get(_ABCMASPLUS).execute_query("""
+                SELECT idUsuario, Nombre AS nombre, NULL AS apellido,
+                       email, idRol AS rol, puesto, Activa AS activo
+                FROM ABCMASplus.dbo.Usuarios
+                WHERE idUsuario = :employee_id AND Activa = 1
+            """, {"employee_id": employee_id})
+            return rows[0] if rows else None
 
         except Exception as e:
             logger.error(f"Error buscando usuario por employee_id {employee_id}: {e}")
@@ -452,27 +427,25 @@ class RegistrationManager:
             Diccionario con el estado o None
         """
         try:
-            query = text("""
-                SELECT
-                    ut.verificado,
-                    ut.estado,
-                    ut.intentosVerificacion,
-                    ut.fechaRegistro,
-                    u.Nombre,
-                    u.email
-                FROM consolaMonitoreo..BotIA_UsuariosTelegram ut
-                INNER JOIN OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios u ON ut.idUsuario = u.idUsuario
-                WHERE ut.telegramChatId = :chat_id
-                    AND ut.activo = 1
-            """)
+            # 1. Obtener registro Telegram desde consolaMonitoreo
+            result_ut = self.session.execute(text("""
+                SELECT idUsuario, verificado, estado, intentosVerificacion, fechaRegistro
+                FROM consolaMonitoreo..BotIA_UsuariosTelegram
+                WHERE telegramChatId = :chat_id AND activo = 1
+            """), {"chat_id": chat_id})
+            row_ut = result_ut.fetchone()
+            if not row_ut:
+                return None
+            ut_data = dict(zip(result_ut.keys(), row_ut))
 
-            result = self.session.execute(query, {"chat_id": chat_id})
-            row = result.fetchone()
+            # 2. Obtener nombre y email directamente desde ABCMASplus
+            rows = DatabaseManager.get(_ABCMASPLUS).execute_query("""
+                SELECT Nombre, email
+                FROM ABCMASplus.dbo.Usuarios
+                WHERE idUsuario = :user_id
+            """, {"user_id": ut_data["idUsuario"]})
 
-            if row:
-                return dict(zip(result.keys(), row))
-
-            return None
+            return {**ut_data, **(rows[0] if rows else {})}
 
         except Exception as e:
             logger.error(f"Error obteniendo estado de registro: {e}")
