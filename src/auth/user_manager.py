@@ -13,8 +13,11 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from src.database.connection import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+_ABCMASPLUS = "BAZ_CDMX"
 
 
 class TelegramUser:
@@ -94,40 +97,40 @@ class UserManager:
             TelegramUser si existe, None en caso contrario
         """
         try:
-            query = text("""
+            # 1. Obtener registro Telegram desde consolaMonitoreo
+            result_ut = self.session.execute(text("""
                 SELECT
-                    u.idUsuario,
-                    u.Nombre,
-                    u.email,
-                    u.idRol,
-                    r.rol AS rolNombre,
-                    u.Activa,
-                    ut.idUsuarioTelegram,
-                    ut.telegramChatId,
-                    ut.telegramUsername,
-                    ut.telegramFirstName,
-                    ut.telegramLastName,
-                    ut.alias,
-                    ut.esPrincipal,
-                    ut.estado,
-                    ut.verificado,
-                    ut.fechaUltimaActividad
-                FROM consolaMonitoreo..BotIA_UsuariosTelegram ut
-                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios u ON ut.idUsuario = u.idUsuario
-                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
-                WHERE ut.telegramChatId = :chat_id
-                    AND ut.activo = 1
-            """)
+                    idUsuario,
+                    idUsuarioTelegram,
+                    telegramChatId,
+                    telegramUsername,
+                    telegramFirstName,
+                    telegramLastName,
+                    alias,
+                    esPrincipal,
+                    estado,
+                    verificado,
+                    fechaUltimaActividad
+                FROM consolaMonitoreo..BotIA_UsuariosTelegram
+                WHERE telegramChatId = :chat_id AND activo = 1
+            """), {"chat_id": chat_id})
+            row_ut = result_ut.fetchone()
+            if not row_ut:
+                return None
+            ut_data = dict(zip(result_ut.keys(), row_ut))
 
-            result = self.session.execute(query, {"chat_id": chat_id})
-            row = result.fetchone()
+            # 2. Obtener datos de usuario y rol directamente desde ABCMASplus
+            rows = DatabaseManager.get(_ABCMASPLUS).execute_query("""
+                SELECT u.idUsuario, u.Nombre, u.email, u.idRol, u.Activa, r.rol AS rolNombre
+                FROM ABCMASplus.dbo.Usuarios u
+                INNER JOIN ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
+                WHERE u.idUsuario = :user_id
+            """, {"user_id": ut_data["idUsuario"]})
 
-            if row:
-                # Convertir row a diccionario
-                data = dict(zip(result.keys(), row))
-                return TelegramUser(data)
+            if not rows:
+                return None
 
-            return None
+            return TelegramUser({**rows[0], **ut_data})
 
         except Exception as e:
             logger.error(f"Error obteniendo usuario por chat_id {chat_id}: {e}")
@@ -144,40 +147,37 @@ class UserManager:
             TelegramUser si existe, None en caso contrario
         """
         try:
-            query = text("""
-                SELECT
-                    u.idUsuario,
-                    u.Nombre,
-                    u.email,
-                    u.idRol,
-                    r.rol AS rolNombre,
-                    u.Activa,
-                    ut.idUsuarioTelegram,
-                    ut.telegramChatId,
-                    ut.telegramUsername,
-                    ut.telegramFirstName,
-                    ut.telegramLastName,
-                    ut.alias,
-                    ut.esPrincipal,
-                    ut.estado,
-                    ut.verificado,
-                    ut.fechaUltimaActividad
-                FROM  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Usuarios u
-                INNER JOIN  OPENDATASOURCE('SQLNCLI', 'Data Source=10.53.34.130,1533;User ID=usrmon;Password=MonAplic01@;').ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
-                LEFT JOIN  consolaMonitoreo..BotIA_UsuariosTelegram ut ON u.idUsuario = ut.idUsuario
-                    AND ut.esPrincipal = 1
-                    AND ut.activo = 1
+            # 1. Obtener datos de usuario y rol directamente desde ABCMASplus
+            rows = DatabaseManager.get(_ABCMASPLUS).execute_query("""
+                SELECT u.idUsuario, u.Nombre, u.email, u.idRol, u.Activa, r.rol AS rolNombre
+                FROM ABCMASplus.dbo.Usuarios u
+                INNER JOIN ABCMASplus.dbo.Roles r ON u.idRol = r.idRol
                 WHERE u.idUsuario = :user_id
-            """)
+            """, {"user_id": user_id})
 
-            result = self.session.execute(query, {"user_id": user_id})
-            row = result.fetchone()
+            if not rows:
+                return None
 
-            if row:
-                data = dict(zip(result.keys(), row))
-                return TelegramUser(data)
+            # 2. Obtener cuenta Telegram principal desde consolaMonitoreo
+            result_ut = self.session.execute(text("""
+                SELECT
+                    idUsuarioTelegram,
+                    telegramChatId,
+                    telegramUsername,
+                    telegramFirstName,
+                    telegramLastName,
+                    alias,
+                    esPrincipal,
+                    estado,
+                    verificado,
+                    fechaUltimaActividad
+                FROM consolaMonitoreo..BotIA_UsuariosTelegram
+                WHERE idUsuario = :user_id AND esPrincipal = 1 AND activo = 1
+            """), {"user_id": user_id})
+            row_ut = result_ut.fetchone()
+            ut_data = dict(zip(result_ut.keys(), row_ut)) if row_ut else {}
 
-            return None
+            return TelegramUser({**rows[0], **ut_data})
 
         except Exception as e:
             logger.error(f"Error obteniendo usuario por ID {user_id}: {e}")

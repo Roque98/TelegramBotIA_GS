@@ -4,7 +4,7 @@ Generador de consultas SQL a partir de lenguaje natural.
 Usa un LLM para traducir consultas en lenguaje natural a SQL.
 """
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 from ..providers.base_provider import LLMProvider
 from ..prompts import get_default_manager
 
@@ -30,7 +30,8 @@ class SQLGenerator:
     async def generate_sql(
         self,
         user_query: str,
-        database_schema: str
+        database_schema: str,
+        user_context: Optional[Dict[str, Any]] = None
     ) -> Optional[str]:
         """
         Generar consulta SQL a partir de lenguaje natural.
@@ -38,6 +39,7 @@ class SQLGenerator:
         Args:
             user_query: Consulta del usuario en lenguaje natural
             database_schema: Esquema de la base de datos
+            user_context: Contexto del usuario (telegram_chat_id, id_usuario, etc.)
 
         Returns:
             Consulta SQL generada, o None si no se pudo generar
@@ -47,7 +49,8 @@ class SQLGenerator:
             'sql_generation',
             version=self.prompt_version,
             user_query=user_query,
-            database_schema=database_schema
+            database_schema=database_schema,
+            user_context=user_context
         )
 
         try:

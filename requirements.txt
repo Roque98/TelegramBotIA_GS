@@ -4,8 +4,8 @@ python-telegram-bot==21.7
 # LLM Libraries
 openai==v2.6.1
 anthropic==0.39.0
-langchain==0.3.7
-langchain-community==0.3.7
+langchain==0.3.25
+langchain-community==0.3.24
 
 # Database
 sqlalchemy>=2.0.0,<2.0.36  # Versión flexible compatible
