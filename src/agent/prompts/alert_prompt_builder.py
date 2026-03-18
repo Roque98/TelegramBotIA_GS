@@ -43,7 +43,7 @@ class AlertPromptBuilder:
             v = evento.get(key)
             return str(v).strip() if v is not None and str(v).strip() else default
 
-        matriz_ordenada = sorted(matriz or [], key=lambda r: int(r.get("nivel") or 0), reverse=True)
+        matriz_ordenada = sorted(matriz or [], key=lambda r: int(r.get("nivel") or 0))
 
         return "\n\n".join(filter(None, [
             self._seccion_alerta(val, template_info, template_id, instancia),
