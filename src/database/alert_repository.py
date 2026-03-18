@@ -129,8 +129,18 @@ class AlertRepository:
         try:
             rows = db.execute_query(sql, params, autocommit=True)
             if rows:
-                logger.info(f"get_template_id → idTemplate={rows[0].get('idTemplate')} [ip={ip}, url={url}]")
-                return rows[0]
+                row = rows[0]
+                # IDTemplateByIp no tiene alias en la columna instancia → puede llegar
+                # como clave vacía '' o None; normalizamos a 'instancia'
+                if "instancia" not in row:
+                    sin_nombre = row.get("") or row.get(None) or ""
+                    row = {"idTemplate": row.get("idTemplate"), "instancia": str(sin_nombre).strip()}
+                logger.info(
+                    f"get_template_id → idTemplate={row.get('idTemplate')} "
+                    f"instancia={row.get('instancia')} [ip={ip}, url={url}]"
+                )
+                return row
+            logger.warning(f"get_template_id → sin resultados [ip={ip}, url={url}]")
         except Exception as e:
             logger.warning(f"No se pudo obtener template id [ip={ip}, url={url}]: {e}")
 
