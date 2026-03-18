@@ -22,6 +22,13 @@ from src.agent.prompts.alert_prompt_builder import AlertPromptBuilder
 
 logger = logging.getLogger(__name__)
 
+_DISCLAIMER = (
+    "\n\n---\n"
+    "_⚠️ Las sugerencias anteriores son orientativas. "
+    "La decisión de ejecutar cualquier acción es responsabilidad exclusiva del operador. "
+    "Valide siempre el impacto antes de actuar._"
+)
+
 
 class AlertAnalysisTool(BaseTool):
     """
@@ -109,7 +116,7 @@ class AlertAnalysisTool(BaseTool):
                     "id_usuario": user_id,
                 }
                 analisis = await context.llm_agent.process_query(prompt, user_context)
-                respuestas.append(analisis)
+                respuestas.append(analisis + _DISCLAIMER)
 
             return ToolResult.success_result(data="\n\n".join(respuestas))
 

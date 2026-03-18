@@ -40,13 +40,31 @@ class AlertPromptBuilder:
     # ------------------------------------------------------------------
 
     def _seccion_alerta(self, val) -> str:
-        return (
+        # Información del equipo responsable
+        area_at = val('AreaAtendedora')
+        gerencia = val('Gerencia')
+        responsable = val('ResponsableAtendedor')
+        lineas_area = []
+        if area_at != 'N/D':
+            lineas_area.append(f"- Área atendedora: {area_at}")
+        if gerencia != 'N/D':
+            lineas_area.append(f"- Área administradora: {gerencia}")
+        if responsable != 'N/D':
+            lineas_area.append(f"- Responsable atendedor: {responsable}")
+        info_equipo = ("Información del equipo:\n" + "\n".join(lineas_area)) if lineas_area else ""
+
+        partes = [
             f"Tengo la siguiente alerta del equipo {val('Equipo')} "
             f"en el Sensor: {val('Sensor')} "
-            f"con el detalle {val('Mensaje')}\n\n"
+            f"con el detalle {val('Mensaje')}",
+        ]
+        if info_equipo:
+            partes.append(info_equipo)
+        partes.append(
             "Se ha buscado los tickets del nodo y nodos hermanos "
             "(misma infraestructura, misma capa)."
         )
+        return "\n\n".join(partes)
 
     def _seccion_tickets(self, tickets: List[Dict[str, Any]]) -> str:
         if not tickets:
