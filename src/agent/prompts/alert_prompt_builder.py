@@ -6,8 +6,8 @@ información del template y matriz de escalamiento.
 from typing import List, Dict, Any, Optional
 
 _ETIQUETA_INSTANCIA = {
-    "BAZ": "🏦 Banco",
-    "COMERCIO": "🏪 Comercio KIO",
+    "BAZ": "ABCMASplus",
+    "COMERCIO": "ABCEKT",
 }
 
 
