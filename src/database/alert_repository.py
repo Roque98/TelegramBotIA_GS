@@ -5,7 +5,7 @@ Si los SPs base no retornan resultados, se ejecutan los SPs _EKT
 (que internamente acceden a la instancia EKT vía OPENDATASOURCE).
 """
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from src.database.connection import DatabaseManager
 
@@ -106,6 +106,81 @@ class AlertRepository:
                 logger.info(f"get_historical_tickets → sin resultados en {origen}, probando SP EKT")
             except Exception as e:
                 logger.warning(f"No se pudo ejecutar {sp} [{ip}/{sensor}]: {e}")
+
+        return []
+
+    def get_template_id(self, ip: str, url: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene el ID de template asociado al evento.
+        Si hay URL busca por URL, sino busca por IP.
+
+        Returns:
+            Diccionario con idTemplate e instancia, o None si no se encuentra.
+        """
+        db = DatabaseManager.get(_DB_ALIAS)
+
+        if url:
+            sql = "EXEC Monitoreos.dbo.IDTemplateByUrl @url = :url"
+            params = {"url": url}
+        else:
+            sql = "EXEC Monitoreos.dbo.IDTemplateByIp @ip = :ip"
+            params = {"ip": ip}
+
+        try:
+            rows = db.execute_query(sql, params, autocommit=True)
+            if rows:
+                logger.info(f"get_template_id → idTemplate={rows[0].get('idTemplate')} [ip={ip}, url={url}]")
+                return rows[0]
+        except Exception as e:
+            logger.warning(f"No se pudo obtener template id [ip={ip}, url={url}]: {e}")
+
+        return None
+
+    def get_template_info(self, template_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene la información del template (nombre, gerencias).
+        Intenta primero con Template_GetById, luego con la versión _EKT.
+
+        Returns:
+            Diccionario con los datos del template, o None si no se encuentra.
+        """
+        db = DatabaseManager.get(_DB_ALIAS)
+
+        for sp, origen, autocommit in (
+            ("EXEC ABCMASplus.dbo.Template_GetById", "BAZ_CDMX", False),
+            ("EXEC ABCMASplus.dbo.Template_GetById_EKT", "EKT", True),
+        ):
+            try:
+                rows = db.execute_query(f"{sp} @id = :id", {"id": template_id}, autocommit=autocommit)
+                if rows:
+                    logger.info(f"get_template_info → template {template_id} encontrado [{origen}]")
+                    return rows[0]
+            except Exception as e:
+                logger.warning(f"No se pudo ejecutar {sp} [id={template_id}]: {e}")
+
+        return None
+
+    def get_escalation_matrix(self, template_id: int) -> List[Dict[str, Any]]:
+        """
+        Obtiene la matriz de escalamiento del template.
+        Intenta primero con ObtenerMatriz, luego con la versión _EKT.
+
+        Returns:
+            Lista de filas de la matriz ordenadas por nivel.
+        """
+        db = DatabaseManager.get(_DB_ALIAS)
+
+        for sp, origen, autocommit in (
+            ("EXEC ABCMASplus.dbo.ObtenerMatriz", "BAZ_CDMX", False),
+            ("EXEC ABCMASplus.dbo.ObtenerMatriz_EKT", "EKT", True),
+        ):
+            try:
+                rows = db.execute_query(f"{sp} @idTemplate = :id", {"id": template_id}, autocommit=autocommit)
+                if rows:
+                    logger.info(f"get_escalation_matrix → {len(rows)} nivel(es) [{origen}] [template={template_id}]")
+                    return rows
+            except Exception as e:
+                logger.warning(f"No se pudo ejecutar {sp} [template={template_id}]: {e}")
 
         return []
 
