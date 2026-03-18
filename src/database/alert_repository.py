@@ -120,10 +120,10 @@ class AlertRepository:
         db = DatabaseManager.get(_DB_ALIAS)
 
         if url:
-            sql = "EXEC Monitoreos.dbo.IDTemplateByUrl @url = :url"
+            sql = "EXEC ABCMASplus.dbo.IDTemplateByUrl @url = :url"
             params = {"url": url}
         else:
-            sql = "EXEC Monitoreos.dbo.IDTemplateByIp @ip = :ip"
+            sql = "EXEC ABCMASplus.dbo.IDTemplateByIp @ip = :ip"
             params = {"ip": ip}
 
         try:
