@@ -106,13 +106,15 @@ class DatabaseManager:
             logger.error(f"Error obteniendo esquema: {e}")
             raise
 
-    def execute_query(self, sql_query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    def execute_query(self, sql_query: str, params: Dict[str, Any] = None, autocommit: bool = False) -> List[Dict[str, Any]]:
         """
         Ejecutar una consulta SQL de solo lectura o EXEC de stored procedure.
 
         Args:
             sql_query: Consulta SQL o EXEC a ejecutar
             params: Parámetros nombrados para la consulta (ej: {"ip": "10.0.0.1"})
+            autocommit: Si True, ejecuta sin transacción implícita. Necesario para
+                        SPs que usan OPENDATASOURCE (evita transacciones distribuidas).
 
         Returns:
             Lista de diccionarios con los resultados
@@ -126,15 +128,20 @@ class DatabaseManager:
             raise ValueError("Solo se permiten consultas SELECT o EXEC de stored procedures")
 
         try:
-            with self.get_session() as session:
-                result = session.execute(text(sql_query), params or {})
-                rows = result.fetchall()
+            if autocommit:
+                with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                    result = conn.execute(text(sql_query), params or {})
+                    rows = result.fetchall()
+            else:
+                with self.get_session() as session:
+                    result = session.execute(text(sql_query), params or {})
+                    rows = result.fetchall()
 
-                # Convertir a lista de diccionarios
-                if rows:
-                    columns = result.keys()
-                    return [dict(zip(columns, row)) for row in rows]
-                return []
+            # Convertir a lista de diccionarios
+            if rows:
+                columns = result.keys()
+                return [dict(zip(columns, row)) for row in rows]
+            return []
 
         except Exception as e:
             logger.error(f"Error ejecutando consulta: {e}")
