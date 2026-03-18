@@ -47,8 +47,11 @@ class AlertRepository:
         """
         db = DatabaseManager.get(_DB_ALIAS)
 
-        for sps, origen in ((_SPS_EVENTOS, "BAZ_CDMX"), (_SPS_EVENTOS_EKT, "EKT")):
-            rows = self._ejecutar_sps_eventos(db, sps)
+        for sps, origen, autocommit in (
+            (_SPS_EVENTOS, "BAZ_CDMX", False),
+            (_SPS_EVENTOS_EKT, "EKT", True),
+        ):
+            rows = self._ejecutar_sps_eventos(db, sps, autocommit=autocommit)
 
             if ip:
                 rows = [r for r in rows if r.get("IP") == ip]
@@ -87,13 +90,13 @@ class AlertRepository:
         """
         db = DatabaseManager.get(_DB_ALIAS)
 
-        for sp, origen in (
-            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta", "BAZ_CDMX"),
-            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta_EKT", "EKT"),
+        for sp, origen, autocommit in (
+            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta", "BAZ_CDMX", False),
+            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta_EKT", "EKT", True),
         ):
             try:
                 sql = f"{sp} @ip = :ip, @sensor = :sensor"
-                rows = db.execute_query(sql, {"ip": ip, "sensor": sensor})
+                rows = db.execute_query(sql, {"ip": ip, "sensor": sensor}, autocommit=autocommit)
                 if rows:
                     logger.info(
                         f"get_historical_tickets → {len(rows)} ticket(s) [{origen}] "
@@ -110,12 +113,12 @@ class AlertRepository:
     # Helpers privados
     # ------------------------------------------------------------------
 
-    def _ejecutar_sps_eventos(self, db, sps: tuple) -> List[Dict[str, Any]]:
+    def _ejecutar_sps_eventos(self, db, sps: tuple, autocommit: bool = False) -> List[Dict[str, Any]]:
         """Ejecuta una lista de SPs de eventos y combina los resultados."""
         rows = []
         for sp in sps:
             try:
-                rows += db.execute_query(sp)
+                rows += db.execute_query(sp, autocommit=autocommit)
             except Exception as e:
                 logger.warning(f"No se pudo ejecutar {sp}: {e}")
         return rows
