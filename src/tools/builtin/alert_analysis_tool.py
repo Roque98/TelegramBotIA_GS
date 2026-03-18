@@ -114,10 +114,17 @@ class AlertAnalysisTool(BaseTool):
 
                 template_row = repo.get_template_id(ip=ip, url=url)
                 template_id = template_row.get("idTemplate") if template_row else None
+                instancia = (template_row.get("instancia") or "").strip() if template_row else ""
                 template_info = repo.get_template_info(template_id) if template_id else None
                 matriz = repo.get_escalation_matrix(template_id) if template_id else []
 
-                prompt = builder.build(evento, tickets, query, template_info=template_info, matriz=matriz)
+                prompt = builder.build(
+                    evento, tickets, query,
+                    template_info=template_info,
+                    matriz=matriz,
+                    template_id=template_id,
+                    instancia=instancia,
+                )
 
                 user_context = {
                     "telegram_chat_id": context.get_chat_id(),
