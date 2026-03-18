@@ -41,9 +41,15 @@ class AlertPromptBuilder:
 
     def _seccion_alerta(self, val) -> str:
         return (
-            f"Tengo la siguiente alerta del equipo {val('Equipo')} "
-            f"en el Sensor: {val('Sensor')} "
-            f"con el detalle {val('Mensaje')}\n\n"
+            f"DATOS DEL EVENTO ACTIVO:\n"
+            f"- Equipo: {val('Equipo')}\n"
+            f"- IP: {val('IP')}\n"
+            f"- Sensor: {val('Sensor')}\n"
+            f"- Detalle: {val('Mensaje')}\n"
+            f"- Área atendedora: {val('AreaAtendedora')}\n"
+            f"- Responsable atendedor: {val('ResponsableAtendedor')}\n"
+            f"- Área administradora: {val('AreaAdministradora')}\n"
+            f"- Responsable administrador: {val('ResponsableAdministrador')}\n\n"
             "Se ha buscado los tickets del nodo y nodos hermanos "
             "(misma infraestructura, misma capa)."
         )
@@ -70,9 +76,24 @@ class AlertPromptBuilder:
 
     def _seccion_instruccion(self) -> str:
         return (
-            "Eres un asistente encargado de sugerir soluciones. "
-            "Inicia tu respuesta describiendo brevemente el detalle de la alerta actual. "
-            "Después, con base en la información otorgada, indícale al usuario posibles "
-            "soluciones, indicando sobre qué ticket de la causa raíz usaste para determinar "
-            "la solución. También puedes usar tu conocimiento para justificar tu respuesta."
+            "Eres un asistente de operaciones TI. Genera una respuesta en español con "
+            "EXACTAMENTE estas secciones en este orden (Markdown para Telegram). "
+            "No agregues secciones extra, no cambies el orden y no hagas preguntas al usuario.\n"
+            "En la sección de acciones, indica entre paréntesis el ticket del que proviene cada acción "
+            "cuando aplique (ej: '(basado en ticket #12345)'). Máximo 5 acciones. "
+            "Usa `código` solo para comandos de terminal.\n\n"
+            "🔴 *ALERTA: {Equipo} ({IP})*\n"
+            "📡 *Sensor:* {Sensor} — {resumen breve del detalle}\n\n"
+            "👥 *Área responsable*\n"
+            "• Área atendedora: {AreaAtendedora} — Responsable: {ResponsableAtendedor}\n"
+            "• Área administradora: {AreaAdministradora} — Responsable: {ResponsableAdministrador}\n\n"
+            "🛠 *Acciones recomendadas*\n"
+            "1. {acción más urgente}\n"
+            "2. {segunda acción}\n"
+            "3. {tercera acción}\n\n"
+            "📋 *Contexto histórico*\n"
+            "{Una sola oración: ticket(s) usados como base, o indicar que no hay histórico y "
+            "que las recomendaciones se basan en procedimiento estándar.}\n\n"
+            "Completa las secciones anteriores con los datos del evento. "
+            "Sé directo y conciso. No uses emojis fuera de los indicados."
         )
