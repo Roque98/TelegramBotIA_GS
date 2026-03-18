@@ -1,7 +1,8 @@
 """
 Repositorio de alertas de monitoreo PRTG.
-Ejecuta los SPs de eventos e historial de tickets contra BAZ_CDMX.
-Si no hay resultados en BAZ_CDMX, reintenta contra COMERCIO_KIO.
+Todos los SPs se ejecutan contra BAZ_CDMX.
+Si los SPs base no retornan resultados, se ejecutan los SPs _EKT
+(que internamente acceden a la instancia EKT vía OPENDATASOURCE).
 """
 import logging
 from typing import List, Dict, Any
@@ -10,8 +11,17 @@ from src.database.connection import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-# Instancias consultadas en orden de prioridad
-_DB_ALIASES = ("BAZ_CDMX", "COMERCIO_KIO")
+_DB_ALIAS = "BAZ_CDMX"
+
+# SPs de eventos: primero los de BAZ_CDMX, luego los _EKT como fallback
+_SPS_EVENTOS = (
+    "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidos",
+    "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidosPerformance",
+)
+_SPS_EVENTOS_EKT = (
+    "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidos_EKT",
+    "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidosPerformance_EKT",
+)
 
 
 class AlertRepository:
@@ -24,11 +34,8 @@ class AlertRepository:
         solo_down: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Obtiene eventos activos combinando ambos SPs de monitoreo:
-          - PrtgObtenerEventosEnriquecidos
-          - PrtgObtenerEventosEnriquecidosPerformance
-
-        Consulta primero BAZ_CDMX; si no hay resultados, consulta COMERCIO_KIO.
+        Obtiene eventos activos contra BAZ_CDMX.
+        Si no hay resultados, reintenta con los SPs _EKT.
 
         Args:
             ip: Filtra por IP exacta del equipo.
@@ -38,8 +45,10 @@ class AlertRepository:
         Returns:
             Lista combinada de eventos como diccionarios.
         """
-        for alias in _DB_ALIASES:
-            rows = self._query_active_events(alias)
+        db = DatabaseManager.get(_DB_ALIAS)
+
+        for sps, origen in ((_SPS_EVENTOS, "BAZ_CDMX"), (_SPS_EVENTOS_EKT, "EKT")):
+            rows = self._ejecutar_sps_eventos(db, sps)
 
             if ip:
                 rows = [r for r in rows if r.get("IP") == ip]
@@ -50,12 +59,12 @@ class AlertRepository:
 
             if rows:
                 logger.info(
-                    f"get_active_events → {len(rows)} evento(s) en {alias} "
+                    f"get_active_events → {len(rows)} evento(s) [{origen}] "
                     f"[ip={ip}, equipo={equipo}, solo_down={solo_down}]"
                 )
                 return rows
 
-            logger.info(f"get_active_events → sin resultados en {alias}, probando siguiente instancia")
+            logger.info(f"get_active_events → sin resultados en {origen}, probando SPs EKT")
 
         return []
 
@@ -65,36 +74,35 @@ class AlertRepository:
         sensor: str,
     ) -> List[Dict[str, Any]]:
         """
-        Obtiene tickets históricos de sensores del mismo tipo y capa que el evento.
-        Ejecuta IABOT_ObtenerTicketsByAlerta con @ip y @sensor.
-
-        Consulta primero BAZ_CDMX; si no hay resultados, consulta COMERCIO_KIO.
+        Obtiene tickets históricos ejecutando IABOT_ObtenerTicketsByAlerta contra BAZ_CDMX.
+        Si no hay resultados, reintenta con IABOT_ObtenerTicketsByAlerta_EKT.
 
         Args:
             ip: IP del equipo alertado.
-            sensor: Nombre del sensor (nombre_sensor en VW_CMDB_EquiposConPRTG).
+            sensor: Nombre del sensor.
 
         Returns:
             Lista de tickets con keys: Ticket, alerta, detalle, accionCorrectiva.
-            Retorna [] si no hay historial (no lanza excepción).
+            Retorna [] si no hay historial.
         """
-        sql = (
-            "EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta "
-            "@ip = :ip, @sensor = :sensor"
-        )
-        for alias in _DB_ALIASES:
+        db = DatabaseManager.get(_DB_ALIAS)
+
+        for sp, origen in (
+            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta", "BAZ_CDMX"),
+            ("EXEC Monitoreos.dbo.IABOT_ObtenerTicketsByAlerta_EKT", "EKT"),
+        ):
             try:
-                db = DatabaseManager.get(alias)
+                sql = f"{sp} @ip = :ip, @sensor = :sensor"
                 rows = db.execute_query(sql, {"ip": ip, "sensor": sensor})
                 if rows:
                     logger.info(
-                        f"get_historical_tickets → {len(rows)} ticket(s) en {alias} "
+                        f"get_historical_tickets → {len(rows)} ticket(s) [{origen}] "
                         f"[ip={ip}, sensor={sensor}]"
                     )
                     return rows
-                logger.info(f"get_historical_tickets → sin resultados en {alias}, probando siguiente instancia")
+                logger.info(f"get_historical_tickets → sin resultados en {origen}, probando SP EKT")
             except Exception as e:
-                logger.warning(f"No se pudo obtener historial de tickets en {alias} [{ip}/{sensor}]: {e}")
+                logger.warning(f"No se pudo ejecutar {sp} [{ip}/{sensor}]: {e}")
 
         return []
 
@@ -102,16 +110,12 @@ class AlertRepository:
     # Helpers privados
     # ------------------------------------------------------------------
 
-    def _query_active_events(self, alias: str) -> List[Dict[str, Any]]:
-        """Ejecuta los dos SPs de eventos en la instancia indicada."""
-        db = DatabaseManager.get(alias)
+    def _ejecutar_sps_eventos(self, db, sps: tuple) -> List[Dict[str, Any]]:
+        """Ejecuta una lista de SPs de eventos y combina los resultados."""
         rows = []
-        for sp in (
-            "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidos",
-            "EXEC Monitoreos.dbo.PrtgObtenerEventosEnriquecidosPerformance",
-        ):
+        for sp in sps:
             try:
                 rows += db.execute_query(sp)
             except Exception as e:
-                logger.warning(f"No se pudo ejecutar {sp} en {alias}: {e}")
+                logger.warning(f"No se pudo ejecutar {sp}: {e}")
         return rows
