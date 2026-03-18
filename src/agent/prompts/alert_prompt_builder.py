@@ -40,31 +40,18 @@ class AlertPromptBuilder:
     # ------------------------------------------------------------------
 
     def _seccion_alerta(self, val) -> str:
-        # Información del equipo responsable
-        area_at = val('AreaAtendedora')
-        gerencia = val('Gerencia')
-        responsable = val('ResponsableAtendedor')
-        lineas_area = []
-        if area_at != 'N/D':
-            lineas_area.append(f"- Área atendedora: {area_at}")
-        if gerencia != 'N/D':
-            lineas_area.append(f"- Área administradora: {gerencia}")
-        if responsable != 'N/D':
-            lineas_area.append(f"- Responsable atendedor: {responsable}")
-        info_equipo = ("Información del equipo:\n" + "\n".join(lineas_area)) if lineas_area else ""
-
-        partes = [
-            f"Tengo la siguiente alerta del equipo {val('Equipo')} "
-            f"en el Sensor: {val('Sensor')} "
-            f"con el detalle {val('Mensaje')}",
-        ]
-        if info_equipo:
-            partes.append(info_equipo)
-        partes.append(
+        return (
+            f"DATOS DEL EVENTO ACTIVO:\n"
+            f"- Equipo: {val('Equipo')}\n"
+            f"- IP: {val('IP')}\n"
+            f"- Sensor: {val('Sensor')}\n"
+            f"- Detalle: {val('Mensaje')}\n"
+            f"- Área atendedora: {val('AreaAtendedora')}\n"
+            f"- Área administradora: {val('Gerencia')}\n"
+            f"- Responsable atendedor: {val('ResponsableAtendedor')}\n\n"
             "Se ha buscado los tickets del nodo y nodos hermanos "
             "(misma infraestructura, misma capa)."
         )
-        return "\n\n".join(partes)
 
     def _seccion_tickets(self, tickets: List[Dict[str, Any]]) -> str:
         if not tickets:
@@ -88,9 +75,28 @@ class AlertPromptBuilder:
 
     def _seccion_instruccion(self) -> str:
         return (
-            "Eres un asistente encargado de sugerir soluciones. "
-            "Inicia tu respuesta describiendo brevemente el detalle de la alerta actual. "
-            "Después, con base en la información otorgada, indícale al usuario posibles "
-            "soluciones, indicando sobre qué ticket de la causa raíz usaste para determinar "
-            "la solución. También puedes usar tu conocimiento para justificar tu respuesta."
+            "Eres un asistente de operaciones TI. Genera una respuesta en español usando "
+            "EXACTAMENTE este formato (Markdown para Telegram). No agregues secciones extra "
+            "ni cambies el orden. No hagas preguntas al usuario al final.\n\n"
+            "---FORMATO---\n"
+            "🔴 *ALERTA: {Equipo} ({IP})*\n"
+            "📡 *Sensor:* {Sensor} — {resumen breve del detalle}\n\n"
+            "👥 *Responsabilidades*\n"
+            "• Área atendedora: {AreaAtendedora}\n"
+            "• Área administradora: {Gerencia}\n"
+            "• Responsable: {ResponsableAtendedor}\n\n"
+            "🛠 *Acciones recomendadas*\n"
+            "1. {primera acción — la más urgente}\n"
+            "2. {segunda acción}\n"
+            "3. {tercera acción}\n"
+            "_(máximo 5 acciones, usa `código` solo para comandos de terminal)_\n\n"
+            "📋 *Contexto histórico*\n"
+            "{Una sola oración: ticket(s) usados como base, o indicar que no hay histórico y "
+            "que las recomendaciones se basan en procedimiento estándar.}\n\n"
+            "---\n"
+            "_⚠️ Sugerencias orientativas. La decisión de ejecutar cualquier acción es "
+            "responsabilidad exclusiva del operador. Valide el impacto antes de actuar._\n"
+            "---FIN FORMATO---\n\n"
+            "Completa el formato anterior con los datos del evento. "
+            "Sé directo y conciso. No uses emojis fuera de los indicados en el formato."
         )
