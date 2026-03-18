@@ -193,6 +193,7 @@ class AlertPromptBuilder:
             "*Administradora:* {AreaAdministradora}\n"
             "👤 {ResponsableAdministrador}\n\n"
             + seccion_dev
+            + seccion_matriz
             + "🛠 *Acciones recomendadas*\n"
             "1. {acción más urgente}\n"
             "2. {segunda acción}\n"
@@ -203,7 +204,6 @@ class AlertPromptBuilder:
             "📋 *Contexto histórico*\n"
             "{Una sola oración: ticket(s) usados como base, o indicar que no hay histórico y "
             "que las recomendaciones se basan en procedimiento estándar.}\n\n"
-            + seccion_matriz
-            + "Completa las secciones anteriores con los datos del evento. "
+            "Completa las secciones anteriores con los datos del evento. "
             "Sé directo y conciso. No uses emojis fuera de los indicados."
         )
