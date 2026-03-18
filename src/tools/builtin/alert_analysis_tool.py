@@ -107,8 +107,17 @@ class AlertAnalysisTool(BaseTool):
                 ip = evento.get("IP", "")
                 sensor = evento.get("Sensor", "")
 
+                # Si el sensor contiene "http" se trata como URL
+                url = sensor if sensor and "http" in sensor.lower() else None
+
                 tickets = repo.get_historical_tickets(ip=ip, sensor=sensor)
-                prompt = builder.build(evento, tickets, query)
+
+                template_row = repo.get_template_id(ip=ip, url=url)
+                template_id = template_row.get("idTemplate") if template_row else None
+                template_info = repo.get_template_info(template_id) if template_id else None
+                matriz = repo.get_escalation_matrix(template_id) if template_id else []
+
+                prompt = builder.build(evento, tickets, query, template_info=template_info, matriz=matriz)
 
                 user_context = {
                     "telegram_chat_id": context.get_chat_id(),
