@@ -5,6 +5,11 @@ información del template y matriz de escalamiento.
 """
 from typing import List, Dict, Any, Optional
 
+_ETIQUETA_INSTANCIA = {
+    "BAZ": "🏦 Banco",
+    "COMERCIO": "🏪 Comercio KIO",
+}
+
 
 class AlertPromptBuilder:
     """Construye el prompt que se envía al LLM para analizar una alerta."""
@@ -16,6 +21,8 @@ class AlertPromptBuilder:
         pregunta_usuario: str,
         template_info: Optional[Dict[str, Any]] = None,
         matriz: Optional[List[Dict[str, Any]]] = None,
+        template_id: Optional[int] = None,
+        instancia: str = "",
     ) -> str:
         """
         Construye el prompt completo con el evento actual y su historial.
@@ -26,6 +33,8 @@ class AlertPromptBuilder:
             pregunta_usuario: Texto original del usuario.
             template_info: Datos del template (Aplicacion, GerenciaDesarrollo, etc.).
             matriz: Filas de la matriz de escalamiento.
+            template_id: ID numérico del template.
+            instancia: 'BAZ' o 'COMERCIO', indica el origen del template.
 
         Returns:
             Prompt listo para enviar al LLM.
@@ -34,23 +43,27 @@ class AlertPromptBuilder:
             v = evento.get(key)
             return str(v).strip() if v is not None and str(v).strip() else default
 
+        matriz_ordenada = sorted(matriz or [], key=lambda r: int(r.get("nivel") or 0), reverse=True)
+
         return "\n\n".join(filter(None, [
-            self._seccion_alerta(val, template_info),
+            self._seccion_alerta(val, template_info, template_id, instancia),
             self._seccion_tickets(tickets),
-            self._seccion_template(template_info, matriz),
-            self._seccion_instruccion(template_info, matriz),
+            self._seccion_template(template_info, matriz_ordenada),
+            self._seccion_instruccion(template_info, matriz_ordenada, template_id, instancia),
         ]))
 
     # ------------------------------------------------------------------
     # Secciones del prompt
     # ------------------------------------------------------------------
 
-    def _seccion_alerta(self, val, template_info: Optional[Dict[str, Any]]) -> str:
+    def _seccion_alerta(self, val, template_info, template_id, instancia) -> str:
         nombre_template = ""
         if template_info:
             nombre = (template_info.get("Aplicacion") or "").strip()
             if nombre:
-                nombre_template = f"- Nombre del template: {nombre}\n"
+                etiqueta = _ETIQUETA_INSTANCIA.get(instancia.upper(), instancia)
+                id_str = f" #{template_id}" if template_id else ""
+                nombre_template = f"- Template:{id_str} {nombre} [{etiqueta}]\n"
 
         return (
             f"DATOS DEL EVENTO ACTIVO:\n"
@@ -87,13 +100,9 @@ class AlertPromptBuilder:
 
         return "\n\n---\n\n".join(bloques)
 
-    def _seccion_template(
-        self,
-        template_info: Optional[Dict[str, Any]],
-        matriz: Optional[List[Dict[str, Any]]],
-    ) -> str:
+    def _seccion_template(self, template_info, matriz_ordenada) -> str:
         """Agrega al prompt los datos del template y la matriz como contexto para el LLM."""
-        if not template_info and not matriz:
+        if not template_info and not matriz_ordenada:
             return ""
 
         partes = ["DATOS DEL TEMPLATE:"]
@@ -103,9 +112,9 @@ class AlertPromptBuilder:
             if gerencia_dev:
                 partes.append(f"- Gerencia de desarrollo: {gerencia_dev}")
 
-        if matriz:
-            partes.append("Matriz de escalamiento:")
-            for fila in matriz:
+        if matriz_ordenada:
+            partes.append("Matriz de escalamiento (de mayor a menor nivel):")
+            for fila in matriz_ordenada:
                 nivel = fila.get("nivel", "")
                 nombre = (fila.get("Nombre") or "").strip()
                 puesto = (fila.get("puesto") or "").strip()
@@ -127,29 +136,46 @@ class AlertPromptBuilder:
 
         return "\n".join(partes)
 
-    def _seccion_instruccion(
-        self,
-        template_info: Optional[Dict[str, Any]],
-        matriz: Optional[List[Dict[str, Any]]],
-    ) -> str:
+    def _seccion_instruccion(self, template_info, matriz_ordenada, template_id, instancia) -> str:
         tiene_template = bool(template_info and (template_info.get("Aplicacion") or "").strip())
         tiene_dev = bool(template_info and (template_info.get("GerenciaDesarrollo") or "").strip())
-        tiene_matriz = bool(matriz)
+        tiene_matriz = bool(matriz_ordenada)
 
-        seccion_titulo = (
-            "📌 *{Aplicacion}*\n" if tiene_template else ""
-        )
+        if tiene_template:
+            etiqueta = _ETIQUETA_INSTANCIA.get(instancia.upper(), instancia)
+            id_str = f" #{template_id}" if template_id else ""
+            seccion_titulo = f"📌 *{{Aplicacion}}{id_str}* | {etiqueta}\n"
+        else:
+            seccion_titulo = ""
+
         seccion_dev = (
             "💻 *Área responsable desarrollo*\n"
             "{GerenciaDesarrollo}\n\n"
             if tiene_dev else ""
         )
-        seccion_matriz = (
-            "📞 *Matriz de escalamiento*\n"
-            "• Nivel {nivel}: {Nombre} ({puesto}) — Ext: {Extension} | Cel: {celular} | Escalar en: {TiempoEscalacion} min\n"
-            "_(incluye todos los niveles disponibles)_\n\n"
-            if tiene_matriz else ""
-        )
+
+        if tiene_matriz:
+            filas_matriz = ""
+            for fila in matriz_ordenada:
+                nivel = fila.get("nivel", "")
+                nombre = (fila.get("Nombre") or "").strip()
+                puesto = (fila.get("puesto") or "").strip()
+                ext = (fila.get("Extension") or "").strip()
+                cel = (fila.get("celular") or "").strip()
+                tiempo = fila.get("TiempoEscalacion", "")
+
+                contacto = " | ".join(filter(None, [
+                    f"Ext: {ext}" if ext else "",
+                    f"Cel: {cel}" if cel else "",
+                    f"⏱ {tiempo} min" if tiempo else "",
+                ]))
+                filas_matriz += (
+                    f"*Nivel {nivel}* — {nombre}\n"
+                    f"{puesto}" + (f" | {contacto}" if contacto else "") + "\n\n"
+                )
+            seccion_matriz = f"📞 *Matriz de escalamiento*\n{filas_matriz}"
+        else:
+            seccion_matriz = ""
 
         return (
             "Eres un asistente de operaciones TI. Genera una respuesta en español con "
@@ -158,16 +184,16 @@ class AlertPromptBuilder:
             "En la sección de acciones, indica entre paréntesis el ticket del que proviene cada acción "
             "cuando aplique (ej: '(basado en ticket #12345)'). Máximo 5 acciones. "
             "Usa `código` solo para comandos de terminal.\n\n"
-            + seccion_titulo +
-            "🔴 *ALERTA: {Equipo} ({IP})*\n"
+            + seccion_titulo
+            + "🔴 *ALERTA: {Equipo} ({IP})*\n"
             "📡 *Sensor:* {Sensor} — {resumen breve del detalle}\n\n"
             "👥 *Área responsable en operaciones*\n"
             "*Atendedora:* {AreaAtendedora}\n"
             "👤 {ResponsableAtendedor}\n"
             "*Administradora:* {AreaAdministradora}\n"
             "👤 {ResponsableAdministrador}\n\n"
-            + seccion_dev +
-            "🛠 *Acciones recomendadas*\n"
+            + seccion_dev
+            + "🛠 *Acciones recomendadas*\n"
             "1. {acción más urgente}\n"
             "2. {segunda acción}\n"
             "3. {tercera acción}\n\n"
@@ -177,7 +203,7 @@ class AlertPromptBuilder:
             "📋 *Contexto histórico*\n"
             "{Una sola oración: ticket(s) usados como base, o indicar que no hay histórico y "
             "que las recomendaciones se basan en procedimiento estándar.}\n\n"
-            + seccion_matriz +
-            "Completa las secciones anteriores con los datos del evento. "
+            + seccion_matriz
+            + "Completa las secciones anteriores con los datos del evento. "
             "Sé directo y conciso. No uses emojis fuera de los indicados."
         )
