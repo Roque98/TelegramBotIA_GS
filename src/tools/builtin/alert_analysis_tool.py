@@ -114,8 +114,9 @@ class AlertAnalysisTool(BaseTool):
 
                 id_atendedora = evento.get("idAreaAtendedora")
                 id_administradora = evento.get("idAreaAdministradora")
-                contacto_atendedora = repo.get_contacto_gerencia(id_atendedora)
-                contacto_administradora = repo.get_contacto_gerencia(id_administradora)
+                usar_ekt = evento.get("_origen") == "EKT"
+                contacto_atendedora = repo.get_contacto_gerencia(id_atendedora, usar_ekt=usar_ekt)
+                contacto_administradora = repo.get_contacto_gerencia(id_administradora, usar_ekt=usar_ekt)
 
                 template_row = repo.get_template_id(ip=ip, url=url)
                 template_id = template_row.get("idTemplate") if template_row else None
