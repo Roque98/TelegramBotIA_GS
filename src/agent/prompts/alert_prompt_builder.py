@@ -23,6 +23,8 @@ class AlertPromptBuilder:
         matriz: Optional[List[Dict[str, Any]]] = None,
         template_id: Optional[int] = None,
         instancia: str = "",
+        contacto_atendedora: Optional[Dict[str, Any]] = None,
+        contacto_administradora: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Construye el prompt completo con el evento actual y su historial.
@@ -35,6 +37,8 @@ class AlertPromptBuilder:
             matriz: Filas de la matriz de escalamiento.
             template_id: ID numérico del template.
             instancia: 'BAZ' o 'COMERCIO', indica el origen del template.
+            contacto_atendedora: Contacto del área atendedora (correo y extensiones).
+            contacto_administradora: Contacto del área administradora (correo y extensiones).
 
         Returns:
             Prompt listo para enviar al LLM.
@@ -49,7 +53,10 @@ class AlertPromptBuilder:
             self._seccion_alerta(val, template_info, template_id, instancia),
             self._seccion_tickets(tickets),
             self._seccion_template(template_info, matriz_ordenada),
-            self._seccion_instruccion(template_info, matriz_ordenada, template_id, instancia),
+            self._seccion_instruccion(
+                template_info, matriz_ordenada, template_id, instancia,
+                contacto_atendedora, contacto_administradora,
+            ),
         ]))
 
     # ------------------------------------------------------------------
@@ -136,7 +143,23 @@ class AlertPromptBuilder:
 
         return "\n".join(partes)
 
-    def _seccion_instruccion(self, template_info, matriz_ordenada, template_id, instancia) -> str:
+    def _fmt_contacto(self, contacto: Optional[Dict[str, Any]]) -> str:
+        """Formatea el contacto de un área como líneas de correo y extensiones."""
+        if not contacto:
+            return ""
+        correo = (contacto.get("direccion_correo") or "").strip()
+        exts = (contacto.get("extensiones") or "").strip()
+        partes = []
+        if correo:
+            partes.append(f"📧 {correo}")
+        if exts:
+            partes.append(f"☎️ Ext: {exts}")
+        return "\n".join(partes)
+
+    def _seccion_instruccion(
+        self, template_info, matriz_ordenada, template_id, instancia,
+        contacto_atendedora=None, contacto_administradora=None,
+    ) -> str:
         tiene_template = bool(template_info and (template_info.get("Aplicacion") or "").strip())
         tiene_dev = bool(template_info and (template_info.get("GerenciaDesarrollo") or "").strip())
         tiene_matriz = bool(matriz_ordenada)
@@ -190,8 +213,11 @@ class AlertPromptBuilder:
             "👥 *Área responsable en operaciones*\n"
             "*Atendedora:* {AreaAtendedora}\n"
             "👤 {ResponsableAtendedor}\n"
-            "*Administradora:* {AreaAdministradora}\n"
-            "👤 {ResponsableAdministrador}\n\n"
+            + (self._fmt_contacto(contacto_atendedora) + "\n" if contacto_atendedora else "")
+            + "*Administradora:* {AreaAdministradora}\n"
+            "👤 {ResponsableAdministrador}\n"
+            + (self._fmt_contacto(contacto_administradora) + "\n" if contacto_administradora else "")
+            + "\n"
             + seccion_dev
             + seccion_matriz
             + "🛠 *Acciones recomendadas*\n"
