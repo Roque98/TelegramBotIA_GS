@@ -109,6 +109,30 @@ class AlertRepository:
 
         return []
 
+    def get_contacto_gerencia(self, id_gerencia: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene el contacto (correo y extensiones) de una gerencia.
+        Ejecuta ABCMASplus..Contacto_GetByIdGerencia en BAZ_CDMX.
+
+        Returns:
+            Diccionario con Gerencia, direccion_correo, extensiones, o None.
+        """
+        if not id_gerencia:
+            return None
+        db = DatabaseManager.get(_DB_ALIAS)
+        try:
+            rows = db.execute_query(
+                "EXEC ABCMASplus..Contacto_GetByIdGerencia @idGerencia = :id",
+                {"id": id_gerencia},
+            )
+            if rows:
+                logger.info(f"get_contacto_gerencia → idGerencia={id_gerencia}")
+                return rows[0]
+            logger.warning(f"get_contacto_gerencia → sin resultados [idGerencia={id_gerencia}]")
+        except Exception as e:
+            logger.warning(f"No se pudo obtener contacto [idGerencia={id_gerencia}]: {e}")
+        return None
+
     def get_template_id(self, ip: str, url: str = None) -> Optional[Dict[str, Any]]:
         """
         Obtiene el ID de template asociado al evento.

@@ -112,6 +112,11 @@ class AlertAnalysisTool(BaseTool):
 
                 tickets = repo.get_historical_tickets(ip=ip, sensor=sensor)
 
+                id_atendedora = evento.get("idAreaAtendedora")
+                id_administradora = evento.get("idAreaAdministradora")
+                contacto_atendedora = repo.get_contacto_gerencia(id_atendedora)
+                contacto_administradora = repo.get_contacto_gerencia(id_administradora)
+
                 template_row = repo.get_template_id(ip=ip, url=url)
                 template_id = template_row.get("idTemplate") if template_row else None
                 instancia = (template_row.get("instancia") or "").strip() if template_row else ""
@@ -124,6 +129,8 @@ class AlertAnalysisTool(BaseTool):
                     matriz=matriz,
                     template_id=template_id,
                     instancia=instancia,
+                    contacto_atendedora=contacto_atendedora,
+                    contacto_administradora=contacto_administradora,
                 )
 
                 user_context = {
