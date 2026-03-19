@@ -65,6 +65,8 @@ class AlertRepository:
                     f"get_active_events → {len(rows)} evento(s) [{origen}] "
                     f"[ip={ip}, equipo={equipo}, solo_down={solo_down}]"
                 )
+                for row in rows:
+                    row["_origen"] = origen
                 return rows
 
             logger.info(f"get_active_events → sin resultados en {origen}, probando SPs EKT")
@@ -109,28 +111,31 @@ class AlertRepository:
 
         return []
 
-    def get_contacto_gerencia(self, id_gerencia: int) -> Optional[Dict[str, Any]]:
+    def get_contacto_gerencia(self, id_gerencia: int, usar_ekt: bool = False) -> Optional[Dict[str, Any]]:
         """
         Obtiene el contacto (correo y extensiones) de una gerencia.
-        Ejecuta ABCMASplus..Contacto_GetByIdGerencia en BAZ_CDMX.
+        Si usar_ekt=True usa Contacto_GetByIdGerencia_EKT (para alertas de instancia EKT).
 
         Returns:
             Diccionario con Gerencia, direccion_correo, extensiones, o None.
         """
         if not id_gerencia:
             return None
+        sp = (
+            "EXEC ABCMASplus.dbo.Contacto_GetByIdGerencia_EKT @idGerencia = :id"
+            if usar_ekt else
+            "EXEC ABCMASplus..Contacto_GetByIdGerencia @idGerencia = :id"
+        )
+        origen = "EKT" if usar_ekt else "BAZ_CDMX"
         db = DatabaseManager.get(_DB_ALIAS)
         try:
-            rows = db.execute_query(
-                "EXEC ABCMASplus..Contacto_GetByIdGerencia @idGerencia = :id",
-                {"id": id_gerencia},
-            )
+            rows = db.execute_query(sp, {"id": id_gerencia}, autocommit=usar_ekt)
             if rows:
-                logger.info(f"get_contacto_gerencia → idGerencia={id_gerencia}")
+                logger.info(f"get_contacto_gerencia → idGerencia={id_gerencia} [{origen}]")
                 return rows[0]
-            logger.warning(f"get_contacto_gerencia → sin resultados [idGerencia={id_gerencia}]")
+            logger.warning(f"get_contacto_gerencia → sin resultados [idGerencia={id_gerencia}, origen={origen}]")
         except Exception as e:
-            logger.warning(f"No se pudo obtener contacto [idGerencia={id_gerencia}]: {e}")
+            logger.warning(f"No se pudo obtener contacto [idGerencia={id_gerencia}, origen={origen}]: {e}")
         return None
 
     def get_template_id(self, ip: str, url: str = None) -> Optional[Dict[str, Any]]:
